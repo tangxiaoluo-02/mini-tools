@@ -44,11 +44,68 @@
         #safe-bar { position: absolute; height: 100%; background: linear-gradient(90deg, #69f0ae, #00e5ff); border-radius: 7px; transition: left 1s ease, width 1s ease; }
         .bar-labels { display: flex; justify-content: space-between; font-size: 0.62rem; color: rgba(255,255,255,0.4); margin-top: 5px; }
 
-        /* Map */
-        .map-wrap { position: relative; border-radius: 10px; overflow: hidden; }
-        #world-map { width: 100%; height: auto; display: block; }
+        /* ── 世界地圖容器 ── */
+        #map-container {
+            position: relative;
+            border-radius: 10px;
+            overflow: hidden;
+            line-height: 0;        /* 消除 img 底部空隙 */
+            background: #a8d8ea;   /* 載入中的海洋底色 */
+        }
+        #map-bg {
+            width: 100%;
+            height: auto;
+            display: block;
+        }
+        /* 半透明疊色層 */
+        .ov {
+            position: absolute;
+            top: 0; height: 100%;
+            pointer-events: none;
+            transition: left 1s ease, width 1s ease;
+        }
+        #ov-danger-l { background: rgba(200, 30, 30, 0.40); }
+        #ov-safe     { background: rgba(30, 170, 50, 0.32); }
+        #ov-danger-r { background: rgba(200, 30, 30, 0.40); }
+        /* 分界虛線 */
+        .boundary {
+            position: absolute;
+            top: 0; height: 100%; width: 2px;
+            pointer-events: none;
+            background: repeating-linear-gradient(
+                to bottom,
+                rgba(255,255,255,0.92) 0px,
+                rgba(255,255,255,0.92) 6px,
+                transparent 6px,
+                transparent 11px
+            );
+            transition: left 1s ease;
+        }
+        /* 台灣標記 */
+        #tw-dot {
+            position: absolute;
+            width: 10px; height: 10px;
+            background: #ffd54f;
+            border: 1.5px solid #333;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            box-shadow: 0 0 4px rgba(0,0,0,0.4);
+        }
+        #tw-label {
+            position: absolute;
+            font-size: 11px;
+            font-weight: 700;
+            color: #111;
+            text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff;
+            pointer-events: none;
+            white-space: nowrap;
+            transform: translateY(-50%);
+        }
+
+        /* 圖例 */
         .map-legend { display: flex; justify-content: center; gap: 14px; margin-top: 8px; font-size: 0.68rem; color: rgba(255,255,255,0.55); flex-wrap: wrap; }
-        .ld { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 3px; vertical-align: middle; opacity: 0.8; }
+        .ld { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 3px; vertical-align: middle; opacity: 0.85; }
 
         /* Input */
         .input-row { display: flex; gap: 8px; }
@@ -131,12 +188,27 @@
 
     <div class="card">
         <div class="card-title">🗺️ 世界安全地圖（即時更新）</div>
-        <div class="map-wrap">
-            <canvas id="world-map" width="960" height="480"></canvas>
+        <!-- 底圖：Wikimedia 等距圓柱投影世界地圖 -->
+        <div id="map-container">
+            <img id="map-bg"
+                 src="https://upload.wikimedia.org/wikipedia/commons/7/72/BlankMap-World.svg"
+                 alt="世界地圖">
+            <!-- 危險區（左） -->
+            <div class="ov" id="ov-danger-l"></div>
+            <!-- 安全區 -->
+            <div class="ov" id="ov-safe"></div>
+            <!-- 危險區（右） -->
+            <div class="ov" id="ov-danger-r"></div>
+            <!-- 分界虛線 -->
+            <div class="boundary" id="bd-left"></div>
+            <div class="boundary" id="bd-right"></div>
+            <!-- 台灣標記 -->
+            <div id="tw-dot"></div>
+            <span id="tw-label">🇹🇼 台灣</span>
         </div>
         <div class="map-legend">
-            <span><span class="ld" style="background:#4caf50"></span>可飛（同日）</span>
-            <span><span class="ld" style="background:#ef5350"></span>危險（不同日）</span>
+            <span><span class="ld" style="background:#1eaa32"></span>可飛（同日）</span>
+            <span><span class="ld" style="background:#c81e1e"></span>危險（不同日）</span>
             <span>🟡 台灣位置</span>
         </div>
     </div>
@@ -158,7 +230,7 @@
     <div class="footnote">
         ⚠️ 時區以經度÷15估算，誤差約在 ±30 分鐘內<br>
         印度（UTC+5:30）、尼泊爾（UTC+5:45）等特殊地區請自行確認<br>
-        🔒 時區計算純本機，地圖圖片需網路載入
+        🔒 時區計算純本機運算，地圖圖片需要網路連線
     </div>
 </div>
 
@@ -171,88 +243,40 @@ function getTaiwanTime(){
     return new Date(now.getTime() + now.getTimezoneOffset()*60000 + 8*3600000);
 }
 
-// ── 預載世界地圖底圖（Wikimedia Commons，等距圓柱投影）──
-const MAP_URL = 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/72/BlankMap-World.svg/1920px-BlankMap-World.svg.png';
-const mapImg = new Image();
-mapImg.src = MAP_URL;
-mapImg.onload  = () => drawWorldMap(getTaiwanTime());
-mapImg.onerror = () => console.warn('地圖圖片載入失敗，請確認網路連線');
-
-// ── 計算安全經度範圍 ─────────────────────────────────────
 function getSafeRange(tw){
     const twH = tw.getHours() + tw.getMinutes()/60 + tw.getSeconds()/3600;
     const cMin = Math.max(-12, 8 - twH);
-    const cMax = Math.min(14, 32 - twH);
+    const cMax = Math.min(14,  32 - twH);
     const lMin = Math.max(-180, Math.round(cMin * 15));
     const lMax = Math.min(180,  Math.round(cMax * 15));
     return { cMin, cMax, lMin, lMax };
 }
 
-// ── 世界地圖繪製 ─────────────────────────────────────────
-function drawWorldMap(tw){
-    const canvas = document.getElementById('world-map');
-    const ctx    = canvas.getContext('2d');
-    const W = canvas.width, H = canvas.height;
+// ── 地圖疊色更新（純 CSS 定位，不用 Canvas）────────────
+function updateMapOverlay(tw){
     const { lMin, lMax } = getSafeRange(tw);
 
-    // x 座標換算（等距圓柱投影：經度線性對應）
-    function lx(lon){ return ((lon + 180) / 360) * W; }
-    function ly(lat){ return ((90 - lat) / 180) * H;  }
+    // 經度 → 水平百分比位置
+    function lp(lon){ return ((lon + 180) / 360 * 100).toFixed(3) + '%'; }
 
-    ctx.clearRect(0, 0, W, H);
+    const safeL = (lMin + 180) / 360 * 100;
+    const safeW = (lMax - lMin) / 360 * 100;
+    const safeR = safeL + safeW;
 
-    // 1. 底圖（世界地圖）
-    if(mapImg.complete && mapImg.naturalWidth > 0){
-        ctx.drawImage(mapImg, 0, 0, W, H);
-    } else {
-        ctx.fillStyle = '#a8d8ea';
-        ctx.fillRect(0, 0, W, H);
-        ctx.fillStyle = '#555';
-        ctx.font = '20px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('地圖載入中…', W/2, H/2);
-        return;
-    }
+    el('ov-danger-l').style.cssText = `left:0; width:${lp(lMin)}`;
+    el('ov-safe'    ).style.cssText = `left:${lp(lMin)}; width:${safeW.toFixed(3)}%`;
+    el('ov-danger-r').style.cssText = `left:${lp(lMax)}; width:${(100-safeR).toFixed(3)}%`;
+    el('bd-left'    ).style.left    = lp(lMin);
+    el('bd-right'   ).style.left    = lp(lMax);
 
-    // 2. 危險區（左側 + 右側）塗紅色半透明
-    ctx.fillStyle = 'rgba(210, 30, 30, 0.38)';
-    if(lMin > -180) ctx.fillRect(0,           0, lx(lMin),        H); // 左側危險
-    if(lMax < 180)  ctx.fillRect(lx(lMax),    0, W - lx(lMax),    H); // 右側危險
-
-    // 3. 安全區塗綠色半透明
-    ctx.fillStyle = 'rgba(30, 180, 60, 0.32)';
-    ctx.fillRect(lx(lMin), 0, lx(lMax) - lx(lMin), H);
-
-    // 4. 分界虛線
-    ctx.save();
-    ctx.setLineDash([6, 5]);
-    ctx.lineWidth = 1.8;
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
-    [lMin, lMax].forEach(lng => {
-        const x = lx(lng);
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
-    });
-    ctx.restore();
-
-    // 5. 台灣黃點
-    const twX = lx(121), twY = ly(23.5);
-    ctx.fillStyle = '#ffd54f';
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.arc(twX, twY, 5, 0, Math.PI*2);
-    ctx.fill(); ctx.stroke();
-
-    // 6. 台灣文字標籤
-    ctx.font = 'bold 13px sans-serif';
-    ctx.textAlign  = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle  = '#fff';
-    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
-    ctx.lineWidth  = 3;
-    ctx.strokeText('台灣', twX + 8, twY);
-    ctx.fillText  ('台灣', twX + 8, twY);
+    // 台灣（東經 121°，北緯 23.5°）
+    const twL = ((121 + 180) / 360 * 100).toFixed(2) + '%';
+    const twT = ((90 - 23.5) / 180 * 100).toFixed(2) + '%';
+    el('tw-dot'  ).style.cssText = `left:${twL}; top:${twT}`;
+    el('tw-label').style.cssText = `left:calc(${twL} + 7px); top:${twT}`;
 }
+
+function el(id){ return document.getElementById(id); }
 
 // ── 安全區數字 ───────────────────────────────────────────
 function updateSafeZone(tw){
@@ -262,12 +286,12 @@ function updateSafeZone(tw){
         const h=Math.floor(a), m=Math.round((a-h)*60);
         return m ? `UTC${s}${h}:${p(m)}` : `UTC${s}${h}`;
     }
-    document.getElementById('safe-offset').textContent = `${fmtOff(cMin)} ～ ${fmtOff(cMax)}`;
-    document.getElementById('safe-lng').textContent    = `${lMin}° ～ ${lMax}°`;
+    el('safe-offset').textContent = `${fmtOff(cMin)} ～ ${fmtOff(cMax)}`;
+    el('safe-lng'   ).textContent = `${lMin}° ～ ${lMax}°`;
 
     const pMin = ((lMin+180)/360)*100;
     const pW   = ((lMax-lMin)/360)*100;
-    const bar  = document.getElementById('safe-bar');
+    const bar  = el('safe-bar');
     bar.style.left  = `${Math.max(0,pMin)}%`;
     bar.style.width = `${Math.max(0, Math.min(100-Math.max(0,pMin), pW))}%`;
 }
@@ -275,13 +299,11 @@ function updateSafeZone(tw){
 // ── 時鐘主更新 ───────────────────────────────────────────
 function updateClock(){
     const tw = getTaiwanTime();
-    document.getElementById('clock-time').textContent =
-        `${p(tw.getHours())}:${p(tw.getMinutes())}:${p(tw.getSeconds())}`;
-    document.getElementById('clock-date').textContent =
-        `${tw.getFullYear()}年${p(tw.getMonth()+1)}月${p(tw.getDate())}日`;
-    document.getElementById('clock-weekday').textContent = `星期${DAYS[tw.getDay()]}`;
+    el('clock-time'   ).textContent = `${p(tw.getHours())}:${p(tw.getMinutes())}:${p(tw.getSeconds())}`;
+    el('clock-date'   ).textContent = `${tw.getFullYear()}年${p(tw.getMonth()+1)}月${p(tw.getDate())}日`;
+    el('clock-weekday').textContent = `星期${DAYS[tw.getDay()]}`;
     updateSafeZone(tw);
-    drawWorldMap(tw);
+    updateMapOverlay(tw);
 }
 
 // ── 座標查詢 ─────────────────────────────────────────────
@@ -296,8 +318,8 @@ function parseCoord(raw){
 }
 
 function checkCoord(){
-    const raw = document.getElementById('coord-input').value.trim();
-    const res = document.getElementById('result');
+    const raw = el('coord-input').value.trim();
+    const res = el('result');
     const coord = parseCoord(raw);
     if(!coord){
         show(res,'error','❓','格式有誤',
@@ -334,16 +356,16 @@ function checkCoord(){
     }
 }
 
-function show(el,cls,icon,status,detail){
-    el.className=`result ${cls}`; el.style.display='block';
-    document.getElementById('result-icon').textContent   = icon;
-    document.getElementById('result-status').textContent = status;
-    document.getElementById('result-detail').innerHTML   = detail;
+function show(e,cls,icon,status,detail){
+    e.className=`result ${cls}`; e.style.display='block';
+    el('result-icon'  ).textContent = icon;
+    el('result-status').textContent = status;
+    el('result-detail').innerHTML   = detail;
 }
 function dateStr(d){ return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`; }
 function dateOnly(d){ return new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime(); }
 
-document.getElementById('coord-input').addEventListener('keydown', e=>{
+el('coord-input').addEventListener('keydown', e=>{
     if(e.key==='Enter') checkCoord();
 });
 
