@@ -44,10 +44,11 @@
         #safe-bar { position: absolute; height: 100%; background: linear-gradient(90deg, #69f0ae, #00e5ff); border-radius: 7px; transition: left 1s ease, width 1s ease; }
         .bar-labels { display: flex; justify-content: space-between; font-size: 0.62rem; color: rgba(255,255,255,0.4); margin-top: 5px; }
 
-        /* World Map */
-        #world-map { width: 100%; height: auto; display: block; border-radius: 10px; }
+        /* Map */
+        .map-wrap { position: relative; border-radius: 10px; overflow: hidden; }
+        #world-map { width: 100%; height: auto; display: block; }
         .map-legend { display: flex; justify-content: center; gap: 14px; margin-top: 8px; font-size: 0.68rem; color: rgba(255,255,255,0.55); flex-wrap: wrap; }
-        .ld { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 3px; vertical-align: middle; }
+        .ld { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 3px; vertical-align: middle; opacity: 0.8; }
 
         /* Input */
         .input-row { display: flex; gap: 8px; }
@@ -76,9 +77,9 @@
         /* Result */
         #result { display: none; margin-top: 14px; border-radius: 14px; padding: 18px 16px; text-align: center; animation: fadeIn 0.3s ease; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-        #result.safe  { background: rgba(105,240,174,0.15); border: 2px solid #69f0ae; }
-        #result.danger{ background: rgba(255,82,82,0.15);   border: 2px solid #ff5252; }
-        #result.error { background: rgba(255,193,7,0.12);   border: 2px solid #ffc107; }
+        #result.safe   { background: rgba(105,240,174,0.15); border: 2px solid #69f0ae; }
+        #result.danger { background: rgba(255,82,82,0.15);   border: 2px solid #ff5252; }
+        #result.error  { background: rgba(255,193,7,0.12);   border: 2px solid #ffc107; }
         #result-icon   { font-size: 2.2rem; margin-bottom: 6px; }
         #result-status { font-size: 1.25rem; font-weight: 800; margin-bottom: 8px; }
         #result.safe   #result-status { color: #69f0ae; }
@@ -130,12 +131,13 @@
 
     <div class="card">
         <div class="card-title">🗺️ 世界安全地圖（即時更新）</div>
-        <canvas id="world-map" width="720" height="360"></canvas>
+        <div class="map-wrap">
+            <canvas id="world-map" width="960" height="480"></canvas>
+        </div>
         <div class="map-legend">
-            <span><span class="ld" style="background:#2e7d32"></span>可飛（同日）</span>
-            <span><span class="ld" style="background:#7f1d1d"></span>危險（不同日）</span>
-            <span>🟡 台灣</span>
-            <span style="color:rgba(255,255,255,0.3)">虛線＝分界</span>
+            <span><span class="ld" style="background:#4caf50"></span>可飛（同日）</span>
+            <span><span class="ld" style="background:#ef5350"></span>危險（不同日）</span>
+            <span>🟡 台灣位置</span>
         </div>
     </div>
 
@@ -156,7 +158,7 @@
     <div class="footnote">
         ⚠️ 時區以經度÷15估算，誤差約在 ±30 分鐘內<br>
         印度（UTC+5:30）、尼泊爾（UTC+5:45）等特殊地區請自行確認<br>
-        🔒 純本機計算，不需網路，不呼叫任何 API
+        🔒 時區計算純本機，地圖圖片需網路載入
     </div>
 </div>
 
@@ -169,166 +171,92 @@ function getTaiwanTime(){
     return new Date(now.getTime() + now.getTimezoneOffset()*60000 + 8*3600000);
 }
 
-// ── 簡化大陸輪廓（經度, 緯度） ──────────────────────────────
-const REGIONS = [
-    // 北美洲
-    { name:'北美洲', lx:-102, ly:50, poly:[
-        [-165,68],[-125,68],[-82,68],[-65,47],
-        [-75,35],[-80,25],[-87,15],[-80,10],
-        [-105,20],[-120,32],[-125,48],[-150,60]
-    ]},
-    // 格陵蘭
-    { name:'', lx:0, ly:0, poly:[
-        [-55,60],[-18,70],[-18,83],[-73,83],[-73,75]
-    ]},
-    // 南美洲
-    { name:'南美洲', lx:-55, ly:-15, poly:[
-        [-80,10],[-60,12],[-35,-5],[-38,-15],
-        [-42,-23],[-50,-30],[-55,-38],[-68,-55],
-        [-75,-50],[-80,-35],[-80,-15],[-78,0]
-    ]},
-    // 歐洲
-    { name:'歐洲', lx:12, ly:50, poly:[
-        [-10,36],[-5,36],[5,36],[15,37],[28,37],
-        [30,45],[25,55],[27,70],[18,71],
-        [5,62],[0,58],[-5,54],[-8,44],[-5,36]
-    ]},
-    // 非洲
-    { name:'非洲', lx:20, ly:2, poly:[
-        [-18,16],[-5,10],[10,5],[15,2],[40,-8],
-        [35,-35],[18,-35],[12,-25],[5,-5],[-5,10],
-        [0,15],[10,25],[35,38],[38,22],[45,12],
-        [35,12],[25,20],[10,22],[-5,30],[-18,22]
-    ]},
-    // 亞洲
-    { name:'亞洲', lx:88, ly:48, poly:[
-        [28,70],[70,68],[100,72],[130,72],[170,65],[180,60],
-        [150,45],[140,38],[125,25],[120,20],[110,10],[103,1],
-        [97,5],[95,22],[80,12],[70,22],[62,22],[55,23],
-        [45,30],[38,32],[28,38],[28,48],[28,65]
-    ]},
-    // 澳洲
-    { name:'澳洲', lx:134, ly:-27, poly:[
-        [114,-22],[135,-12],[153,-27],[151,-35],
-        [140,-38],[125,-34],[115,-35]
-    ]},
-    // 日本（本州）
-    { name:'', lx:0, ly:0, poly:[
-        [130,31],[137,33],[137,38],[132,38],[130,36]
-    ]},
-    // 英國
-    { name:'', lx:0, ly:0, poly:[
-        [-5,50],[2,51],[1,58],[-5,58],[-3,54]
-    ]},
-    // 紐西蘭
-    { name:'', lx:0, ly:0, poly:[
-        [167,-44],[175,-36],[178,-41],[167,-46]
-    ]},
-    // 馬達加斯加
-    { name:'', lx:0, ly:0, poly:[
-        [44,-12],[50,-12],[50,-25],[44,-25]
-    ]},
-    // 婆羅洲
-    { name:'', lx:0, ly:0, poly:[
-        [108,7],[118,7],[118,-4],[108,-4]
-    ]},
-];
+// ── 預載世界地圖底圖（Wikimedia Commons，等距圓柱投影）──
+const MAP_URL = 'https://upload.wikimedia.org/wikipedia/commons/thumb/7/72/BlankMap-World.svg/1920px-BlankMap-World.svg.png';
+const mapImg = new Image();
+mapImg.src = MAP_URL;
+mapImg.onload  = () => drawWorldMap(getTaiwanTime());
+mapImg.onerror = () => console.warn('地圖圖片載入失敗，請確認網路連線');
 
+// ── 計算安全經度範圍 ─────────────────────────────────────
 function getSafeRange(tw){
     const twH = tw.getHours() + tw.getMinutes()/60 + tw.getSeconds()/3600;
     const cMin = Math.max(-12, 8 - twH);
     const cMax = Math.min(14, 32 - twH);
     const lMin = Math.max(-180, Math.round(cMin * 15));
-    const lMax = Math.min(180, Math.round(cMax * 15));
+    const lMax = Math.min(180,  Math.round(cMax * 15));
     return { cMin, cMax, lMin, lMax };
 }
 
-// ── 世界地圖繪製 ──────────────────────────────────────────
+// ── 世界地圖繪製 ─────────────────────────────────────────
 function drawWorldMap(tw){
     const canvas = document.getElementById('world-map');
-    const ctx = canvas.getContext('2d');
+    const ctx    = canvas.getContext('2d');
     const W = canvas.width, H = canvas.height;
     const { lMin, lMax } = getSafeRange(tw);
 
-    function lx(lon){ return ((lon+180)/360)*W; }
-    function ly(lat){ return ((90-lat)/180)*H;  }
+    // x 座標換算（等距圓柱投影：經度線性對應）
+    function lx(lon){ return ((lon + 180) / 360) * W; }
+    function ly(lat){ return ((90 - lat) / 180) * H;  }
 
-    // 1. 海洋背景
-    ctx.fillStyle = '#1a0e0e'; // 危險（暗紅）
-    ctx.fillRect(0,0,W,H);
-    ctx.fillStyle = '#0e1a0e'; // 安全（暗綠）
-    ctx.fillRect(lx(lMin), 0, lx(lMax)-lx(lMin), H);
+    ctx.clearRect(0, 0, W, H);
 
-    // 2. 用 clip 正確著色大陸：讓每塊陸地根據經度顯示綠/紅
+    // 1. 底圖（世界地圖）
+    if(mapImg.complete && mapImg.naturalWidth > 0){
+        ctx.drawImage(mapImg, 0, 0, W, H);
+    } else {
+        ctx.fillStyle = '#a8d8ea';
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = '#555';
+        ctx.font = '20px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('地圖載入中…', W/2, H/2);
+        return;
+    }
+
+    // 2. 危險區（左側 + 右側）塗紅色半透明
+    ctx.fillStyle = 'rgba(210, 30, 30, 0.38)';
+    if(lMin > -180) ctx.fillRect(0,           0, lx(lMin),        H); // 左側危險
+    if(lMax < 180)  ctx.fillRect(lx(lMax),    0, W - lx(lMax),    H); // 右側危險
+
+    // 3. 安全區塗綠色半透明
+    ctx.fillStyle = 'rgba(30, 180, 60, 0.32)';
+    ctx.fillRect(lx(lMin), 0, lx(lMax) - lx(lMin), H);
+
+    // 4. 分界虛線
     ctx.save();
-    ctx.beginPath();
-    for(const r of REGIONS){
-        const pts = r.poly;
-        ctx.moveTo(lx(pts[0][0]), ly(pts[0][1]));
-        for(let i=1;i<pts.length;i++) ctx.lineTo(lx(pts[i][0]), ly(pts[i][1]));
-        ctx.closePath();
-    }
-    ctx.clip();
-    ctx.fillStyle = '#7f1d1d'; ctx.fillRect(0,0,W,H);            // 危險陸地
-    ctx.fillStyle = '#14532d'; ctx.fillRect(lx(lMin),0, lx(lMax)-lx(lMin), H); // 安全陸地
-    ctx.restore();
-
-    // 3. 大陸輪廓線
-    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-    ctx.lineWidth = 0.8;
-    for(const r of REGIONS){
-        ctx.beginPath();
-        const pts = r.poly;
-        ctx.moveTo(lx(pts[0][0]), ly(pts[0][1]));
-        for(let i=1;i<pts.length;i++) ctx.lineTo(lx(pts[i][0]), ly(pts[i][1]));
-        ctx.closePath();
-        ctx.stroke();
-    }
-
-    // 4. 安全分界虛線
-    ctx.setLineDash([5,5]);
-    ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-    ctx.lineWidth = 1.2;
+    ctx.setLineDash([6, 5]);
+    ctx.lineWidth = 1.8;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
     [lMin, lMax].forEach(lng => {
         const x = lx(lng);
-        ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
     });
-    ctx.setLineDash([]);
+    ctx.restore();
 
-    // 5. 赤道參考線（淡）
-    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-    ctx.lineWidth = 0.8;
-    ctx.beginPath();
-    ctx.moveTo(0, ly(0)); ctx.lineTo(W, ly(0));
-    ctx.stroke();
-
-    // 6. 台灣標記（黃色圓點）
+    // 5. 台灣黃點
     const twX = lx(121), twY = ly(23.5);
     ctx.fillStyle = '#ffd54f';
-    ctx.beginPath(); ctx.arc(twX, twY, 5, 0, Math.PI*2); ctx.fill();
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(twX, twY, 5, 0, Math.PI*2); ctx.stroke();
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(twX, twY, 5, 0, Math.PI*2);
+    ctx.fill(); ctx.stroke();
 
-    // 7. 大陸文字標籤
-    const fs = Math.max(10, W/52);
-    ctx.font = `bold ${fs}px sans-serif`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(255,255,255,0.72)';
-    for(const r of REGIONS){
-        if(!r.name) continue;
-        ctx.fillText(r.name, lx(r.lx), ly(r.ly));
-    }
-
-    // 8. 台灣文字
-    ctx.font = `bold ${Math.max(9,W/60)}px sans-serif`;
-    ctx.textAlign = 'left'; ctx.fillStyle = '#ffd54f';
-    ctx.fillText('台灣', twX+7, twY);
+    // 6. 台灣文字標籤
+    ctx.font = 'bold 13px sans-serif';
+    ctx.textAlign  = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle  = '#fff';
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth  = 3;
+    ctx.strokeText('台灣', twX + 8, twY);
+    ctx.fillText  ('台灣', twX + 8, twY);
 }
 
-// ── 安全區數字更新 ────────────────────────────────────────
+// ── 安全區數字 ───────────────────────────────────────────
 function updateSafeZone(tw){
     const { cMin, cMax, lMin, lMax } = getSafeRange(tw);
-
     function fmtOff(o){
         const s = o>=0?'+':'-', a=Math.abs(o);
         const h=Math.floor(a), m=Math.round((a-h)*60);
@@ -376,22 +304,21 @@ function checkCoord(){
             '請輸入：<strong>緯度, 經度</strong><br>例如：<strong>25.033, 121.565</strong>');
         return;
     }
-
     const estOff = Math.round(coord.lng/15);
-    const tw = getTaiwanTime();
+    const tw  = getTaiwanTime();
     const now = new Date();
     const utcMs = now.getTime()+now.getTimezoneOffset()*60000;
-    const target = new Date(utcMs+estOff*3600000);
+    const target = new Date(utcMs + estOff*3600000);
 
-    const isSame = dateStr(tw)===dateStr(target);
+    const isSame  = dateStr(tw)===dateStr(target);
     const dayDiff = Math.round((dateOnly(target)-dateOnly(tw))/86400000);
 
     const lngLabel = coord.lng>=0
         ? `東經 ${coord.lng.toFixed(4)}°`
         : `西經 ${Math.abs(coord.lng).toFixed(4)}°`;
-    const offLabel  = estOff>=0?`UTC+${estOff}`:`UTC${estOff}`;
-    const tgtLabel  = `${target.getFullYear()}/${p(target.getMonth()+1)}/${p(target.getDate())} ${p(target.getHours())}:${p(target.getMinutes())}`;
-    const twLabel   = `${tw.getFullYear()}/${p(tw.getMonth()+1)}/${p(tw.getDate())} ${p(tw.getHours())}:${p(tw.getMinutes())}`;
+    const offLabel = estOff>=0?`UTC+${estOff}`:`UTC${estOff}`;
+    const tgtLabel = `${target.getFullYear()}/${p(target.getMonth()+1)}/${p(target.getDate())} ${p(target.getHours())}:${p(target.getMinutes())}`;
+    const twLabel  = `${tw.getFullYear()}/${p(tw.getMonth()+1)}/${p(tw.getDate())} ${p(tw.getHours())}:${p(tw.getMinutes())}`;
 
     if(isSame){
         show(res,'safe','🟢','✅ 安全！可以飛過去打菇',
