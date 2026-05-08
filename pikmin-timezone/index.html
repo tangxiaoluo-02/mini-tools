@@ -85,7 +85,6 @@
         <div class="map-legend">
             <span><span class="ld" style="background:#1eaa32"></span>可飛（同日）</span>
             <span><span class="ld" style="background:#c81e1e"></span>危險（不同日）</span>
-            <span>🟡 台灣</span>
         </div>
     </div>
     <div class="card">
@@ -177,14 +176,6 @@ function drawWorldMap(tw){
     if(x2<W){ctx.beginPath();ctx.moveTo(x2,0);ctx.lineTo(x2,H);ctx.stroke();}
     ctx.restore();
 
-    // 台灣標記（東經 121°，北緯 23.5°）
-    const twX=lonToX(121,W), twY=latToY(23.5,H);
-    ctx.fillStyle="#ffd54f"; ctx.strokeStyle="#333"; ctx.lineWidth=1.5;
-    ctx.beginPath(); ctx.arc(twX,twY,6,0,Math.PI*2); ctx.fill(); ctx.stroke();
-    ctx.font="bold 14px sans-serif";
-    ctx.textAlign="left"; ctx.textBaseline="middle";
-    ctx.fillStyle="#fff"; ctx.strokeStyle="rgba(0,0,0,0.65)"; ctx.lineWidth=3;
-    ctx.strokeText("台灣",twX+9,twY); ctx.fillText("台灣",twX+9,twY);
 }
 
 function updateSafeZone(tw){
