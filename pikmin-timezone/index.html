@@ -315,9 +315,9 @@
         document.getElementById('safe-offset').textContent =
             `${fmtOff(cMin)} ～ ${fmtOff(cMax)}`;
 
-        // 經度範圍
-        const lMin = Math.round(cMin * 15);
-        const lMax = Math.round(cMax * 15);
+        // 經度範圍（夾在合法範圍 -180 ~ +180）
+        const lMin = Math.max(-180, Math.round(cMin * 15));
+        const lMax = Math.min(180, Math.round(cMax * 15));
 
         function fmtLng(l) {
             return `${l}°`;
