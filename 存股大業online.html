@@ -1,0 +1,1002 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>存股大業online game</title>
+    <script src="https://cdn.tailwindcss.com" nonce="MzIxNjk2NzQ4LDIzMDc0NDUwODE="></script>
+    <script src="https://unpkg.com/lucide@latest" nonce="MzIxNjk2NzQ4LDIzMDc0NDUwODE="></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js" nonce="MzIxNjk2NzQ4LDIzMDc0NDUwODE="></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js" nonce="MzIxNjk2NzQ4LDIzMDc0NDUwODE="></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .slide-down { animation: slideDown 0.3s ease-out forwards; }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+        .pop-in { animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes popIn { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
+        input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .level-bar-striped { background-image: linear-gradient(45deg,rgba(255,255,255,.15) 25%,transparent 25%,transparent 50%,rgba(255,255,255,.15) 50%,rgba(255,255,255,.15) 75%,transparent 75%,transparent); background-size: 1rem 1rem; }
+        .text-gold { background: linear-gradient(to bottom, #fcd34d, #d97706); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .modal-body-scroll { max-height: 60vh; overflow-y: auto; overscroll-behavior: contain; }
+        .toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%) translateY(20px); background-color: rgba(30, 41, 59, 0.9); color: white; padding: 10px 20px; border-radius: 50px; font-size: 12px; font-weight: 500; opacity: 0; transition: all 0.3s ease-out; pointer-events: none; z-index: 100; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); display: flex; align-items: center; gap: 8px; }
+        .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+        #headerExpanded, #headerCollapsed { transition: all 0.3s ease-in-out; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 pb-28">
+
+    <!-- Header -->
+    <div class="sticky top-0 z-40 bg-emerald-600 text-white shadow-md transition-all duration-300 rounded-b-2xl">
+        <div class="max-w-md mx-auto px-4 pt-4 pb-1">
+            <div class="flex justify-between items-center mb-2">
+                <div class="flex items-center gap-2">
+                    <button onclick="changeYear(-1)" class="p-1 hover:bg-emerald-700 rounded-full transition"><i data-lucide="chevron-left" class="w-5 h-5"></i></button>
+                    <h1 id="yearDisplay" class="text-xl font-bold tracking-wider">2025</h1>
+                    <button onclick="changeYear(1)" class="p-1 hover:bg-emerald-700 rounded-full transition"><i data-lucide="chevron-right" class="w-5 h-5"></i></button>
+                </div>
+                <button onclick="openDashboard()" class="flex items-center gap-1 bg-emerald-700/50 hover:bg-emerald-700 px-3 py-1.5 rounded-full text-xs font-medium transition">
+                    <i data-lucide="bar-chart-2" class="w-4 h-4"></i>
+                    <span>戰情室</span>
+                </button>
+            </div>
+
+            <!-- Expanded View -->
+            <div id="headerExpanded" class="block overflow-hidden transition-all duration-300">
+                <div class="grid grid-cols-2 gap-4 mb-3">
+                    <div class="flex flex-col">
+                        <div class="flex items-center gap-1 opacity-80 mb-0.5">
+                            <i data-lucide="check-circle-2" class="w-3 h-3"></i>
+                            <p class="text-xs">本年已領 (截至<span id="currentMonthDisplay">12</span>月)</p>
+                        </div>
+                        <p id="ytdTotal" class="text-2xl font-bold">NT$ 0</p>
+                    </div>
+                    <div class="flex flex-col text-right">
+                        <div class="flex items-center justify-end gap-1 opacity-80 mb-0.5">
+                            <p class="text-xs">目前平均月領</p>
+                        </div>
+                        <p id="monthAvg" class="text-2xl font-bold">NT$ 0</p>
+                    </div>
+                </div>
+                <div class="bg-black/20 rounded-xl p-3 relative overflow-hidden backdrop-blur-sm border border-white/10">
+                    <div class="flex justify-between items-end mb-2">
+                        <div class="flex items-center gap-2">
+                            <div class="bg-yellow-400 text-emerald-900 font-black text-sm px-2 py-0.5 rounded shadow-lg transform -skew-x-12">
+                                Lv.<span id="currentLevelDisplay">0</span>
+                            </div>
+                            <span id="currentTitleDisplay" class="text-xs font-medium text-emerald-100">存股初心者</span>
+                        </div>
+                        <div class="text-[10px] text-emerald-100 opacity-90">
+                            下級還差 <span id="nextLevelGap" class="font-bold text-yellow-300">NT$ 1,000</span>
+                        </div>
+                    </div>
+                    <div class="w-full bg-black/30 rounded-full h-3 overflow-hidden shadow-inner relative">
+                        <div id="levelProgressBar" class="bg-gradient-to-r from-yellow-400 to-yellow-600 h-full rounded-full transition-all duration-1000 level-bar-striped" style="width: 0%"></div>
+                    </div>
+                </div>
+                
+                <!-- Investment Summary in Header -->
+                <div class="mt-2 grid grid-cols-2 gap-2 text-[10px] text-emerald-100 opacity-90">
+                    <div class="flex flex-col">
+                        <span class="opacity-70">預估全年度配息</span>
+                        <span id="fullYearTotal" class="font-bold text-sm">NT$ 0</span>
+                    </div>
+                    <div class="flex flex-col text-right">
+                        <span class="opacity-70">預估總投入成本</span>
+                        <span id="totalInvestedCost" class="font-bold text-sm text-yellow-300">NT$ 0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Collapsed View -->
+            <div id="headerCollapsed" class="hidden overflow-hidden transition-all duration-300">
+                <div class="flex justify-between items-center bg-black/10 rounded-lg p-2 mb-1">
+                    <div class="flex flex-col">
+                        <span class="text-[10px] opacity-70">平均月領</span>
+                        <span id="monthAvgCollapsed" class="text-lg font-bold">NT$ 0</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <div class="text-right">
+                            <div class="text-[10px] opacity-70" id="currentTitleDisplayCollapsed">存股初心者</div>
+                            <div class="text-sm font-bold text-yellow-300">Lv.<span id="currentLevelDisplayCollapsed">0</span></div>
+                        </div>
+                        <div class="bg-white/20 p-1.5 rounded-full"><i data-lucide="crown" class="w-4 h-4 text-yellow-400"></i></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-center -mb-3 mt-1">
+                <!-- Fix: Added ID to button for reliable JS targeting -->
+                <button id="headerToggleBtn" onclick="toggleHeader()" class="bg-emerald-700/50 hover:bg-emerald-700 text-white rounded-full p-1 transition shadow-sm w-12 flex justify-center">
+                    <i data-lucide="chevron-up" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="max-w-md mx-auto p-4 space-y-3 pt-6" id="monthContainer"></div>
+
+    <!-- Bottom Nav -->
+    <div class="fixed bottom-0 w-full bg-white border-t border-slate-200 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] pb-safe z-30">
+        <div class="max-w-md mx-auto grid grid-cols-3 items-end h-[65px] px-2 relative">
+            <button onclick="openAchievements()" class="flex flex-col items-center justify-center pb-2 text-slate-400 hover:text-emerald-600 transition group h-full">
+                <i data-lucide="trophy" class="w-6 h-6 mb-1 group-hover:scale-110 transition text-yellow-500"></i><span class="text-[10px]">成就</span>
+            </button>
+            <div class="flex justify-center relative -top-5">
+                <button onclick="openStockModal()" class="bg-emerald-600 w-14 h-14 rounded-full shadow-lg shadow-emerald-200 border-4 border-slate-50 flex items-center justify-center hover:bg-emerald-700 hover:scale-105 transition transform">
+                     <i data-lucide="plus" class="w-8 h-8 text-white"></i>
+                </button>
+            </div>
+            <button onclick="openSettings()" class="flex flex-col items-center justify-center pb-2 text-slate-400 hover:text-emerald-600 transition group h-full">
+                <i data-lucide="settings-2" class="w-6 h-6 mb-1 group-hover:scale-110 transition"></i><span class="text-[10px]">設定</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast"><i data-lucide="save" class="w-4 h-4 text-emerald-400"></i><span id="toastMessage">記得備份資料喔！</span></div>
+
+    <!-- Modals -->
+    <!-- Settings -->
+    <div id="settingsModal" class="fixed inset-0 bg-black/50 z-[80] hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-sm p-6 shadow-xl slide-down max-h-[85vh] flex flex-col">
+            <h3 class="text-lg font-bold mb-6 text-slate-700 flex items-center gap-2 flex-shrink-0"><i data-lucide="settings-2" class="w-5 h-5 text-emerald-600"></i> 設定與管理</h3>
+            <div class="space-y-3 flex-1 overflow-y-auto">
+                <button onclick="exportData()" class="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl flex items-center justify-between hover:bg-slate-100 transition group">
+                    <div class="flex items-center gap-3"><div class="bg-blue-100 p-2 rounded-lg text-blue-600"><i data-lucide="download" class="w-5 h-5"></i></div><div class="text-left"><p class="font-bold text-slate-700 text-sm">備份資料 (匯出)</p><p class="text-[10px] text-slate-400">下載 JSON 檔案保存</p></div></div><i data-lucide="chevron-right" class="w-4 h-4 text-slate-300"></i>
+                </button>
+                <button onclick="importDataTrigger()" class="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl flex items-center justify-between hover:bg-slate-100 transition group">
+                    <div class="flex items-center gap-3"><div class="bg-orange-100 p-2 rounded-lg text-orange-600"><i data-lucide="upload" class="w-5 h-5"></i></div><div class="text-left"><p class="font-bold text-slate-700 text-sm">還原資料 (匯入)</p><p class="text-[10px] text-slate-400">從備份檔恢復紀錄</p></div></div><i data-lucide="chevron-right" class="w-4 h-4 text-slate-300"></i>
+                </button>
+                <button onclick="openStockManager()" class="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl flex items-center justify-between hover:bg-slate-100 transition group">
+                    <div class="flex items-center gap-3"><div class="bg-rose-100 p-2 rounded-lg text-rose-600"><i data-lucide="archive" class="w-5 h-5"></i></div><div class="text-left"><p class="font-bold text-slate-700 text-sm">庫存管理</p><p class="text-[10px] text-slate-400">隱藏或管理股票</p></div></div><i data-lucide="chevron-right" class="w-4 h-4 text-slate-300"></i>
+                </button>
+                <button onclick="openClearDataModal()" class="w-full bg-red-50 border border-red-100 p-4 rounded-xl flex items-center justify-between hover:bg-red-100 transition group mt-4">
+                    <div class="flex items-center gap-3"><div class="bg-red-200 p-2 rounded-lg text-red-600"><i data-lucide="trash-2" class="w-5 h-5"></i></div><div class="text-left"><p class="font-bold text-red-700 text-sm">清除網站範例數據</p><p class="text-[10px] text-red-400">清空紀錄，保留存股池</p></div></div>
+                </button>
+            </div>
+            <button onclick="closeSettings()" class="w-full mt-4 text-slate-400 py-3 text-sm hover:text-slate-600 flex-shrink-0">關閉</button>
+            <input type="file" id="fileInput" class="hidden" accept=".json" onchange="importData(this)">
+        </div>
+    </div>
+
+    <!-- Clear Data -->
+    <div id="clearDataModal" class="fixed inset-0 bg-black/80 z-[100] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl slide-down">
+            <div class="text-center mb-6">
+                <div class="inline-block p-3 rounded-full bg-red-100 mb-4"><i data-lucide="alert-triangle" class="w-8 h-8 text-red-600"></i></div>
+                <h3 class="text-lg font-bold text-slate-800">確定要清除所有數據嗎？</h3>
+                <p class="text-sm text-slate-500 mt-2">這將會刪除所有交易紀錄，<br>但會<b>保留</b>您的存股池清單。</p>
+                <p class="text-xs text-red-500 mt-1 font-bold">此動作無法復原！</p>
+            </div>
+            <div class="space-y-4">
+                <div><label class="block text-xs text-slate-500 mb-1">請輸入「清除」以確認：</label><input type="text" id="clearDataInput" class="w-full bg-slate-50 border border-slate-200 rounded-lg p-3 text-center font-bold focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none placeholder:font-normal" placeholder="清除"></div>
+                <div class="grid grid-cols-2 gap-3">
+                    <button onclick="closeClearDataModal()" class="w-full py-3 rounded-xl text-slate-500 font-bold hover:bg-slate-100 transition">取消</button>
+                    <button onclick="executeClearData()" class="w-full py-3 rounded-xl bg-red-600 text-white font-bold hover:bg-red-700 shadow-lg shadow-red-200 transition">確認刪除</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stock Manager -->
+    <div id="stockManagerModal" class="fixed inset-0 bg-slate-100 z-[90] hidden overflow-hidden">
+        <div class="max-w-md mx-auto h-full bg-white shadow-xl relative flex flex-col">
+            <div class="bg-white/90 backdrop-blur-sm border-b border-slate-100 p-4 flex justify-between items-center z-10 flex-shrink-0">
+                <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2"><i data-lucide="archive" class="w-5 h-5 text-emerald-600"></i> 庫存管理</h2>
+                <button onclick="closeStockManager()" class="p-2 bg-slate-100 rounded-full hover:bg-slate-200 transition"><i data-lucide="x" class="w-5 h-5 text-slate-500"></i></button>
+            </div>
+            <div class="p-4 flex-1 overflow-y-auto">
+                <p class="text-xs text-slate-500 mb-4 bg-slate-50 p-3 rounded-lg">提示：隱藏後的股票將不會出現在每個月的「快捷鍵」中，但歷史帳務依然會保留。</p>
+                <div id="stockManagerList" class="space-y-2 pb-10"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Achievements -->
+    <div id="achievementsModal" class="fixed inset-0 bg-slate-100 z-[60] hidden overflow-hidden">
+        <div class="max-w-md mx-auto h-full bg-white shadow-xl relative flex flex-col">
+            <div class="bg-white/90 backdrop-blur-sm border-b border-slate-100 p-4 flex justify-between items-center z-10 flex-shrink-0">
+                <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2"><i data-lucide="crown" class="w-5 h-5 text-yellow-500"></i> 成就展示櫃</h2>
+                <button onclick="closeAchievements()" class="p-2 bg-slate-100 rounded-full hover:bg-slate-200 transition"><i data-lucide="x" class="w-5 h-5 text-slate-500"></i></button>
+            </div>
+            <div class="p-4 space-y-4 flex-1 overflow-y-auto pb-10" id="achievementsList"></div>
+        </div>
+    </div>
+
+    <!-- Level Up -->
+    <div id="levelUpModal" class="fixed inset-0 bg-black/80 z-[100] hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl w-full max-w-sm p-8 text-center shadow-2xl pop-in relative overflow-hidden">
+            <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500"></div>
+            <div class="mb-4 inline-block p-4 rounded-full bg-yellow-100"><i data-lucide="party-popper" class="w-12 h-12 text-yellow-600"></i></div>
+            <h3 class="text-2xl font-black text-slate-800 mb-2">LEVEL UP!</h3>
+            <p class="text-slate-500 mb-6">恭喜！您的平均月領金額提升了</p>
+            <div class="flex justify-center items-center gap-4 mb-6">
+                <div class="text-slate-400 font-bold text-xl">Lv.<span id="prevLevelDisplay"></span></div>
+                <i data-lucide="arrow-right" class="text-slate-300"></i>
+                <div class="text-emerald-600 font-black text-4xl transform scale-110">Lv.<span id="newLevelDisplay"></span></div>
+            </div>
+            <div id="unlockedTitleSection" class="hidden bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6">
+                <p class="text-xs font-bold text-yellow-600 uppercase tracking-wide mb-1">獲得新稱號</p>
+                <p id="unlockedTitleText" class="text-lg font-bold text-slate-800">成就名稱</p>
+                <p id="unlockedTitleDesc" class="text-xs text-slate-500 mt-1">描述</p>
+            </div>
+            <button onclick="closeLevelUp()" class="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-700 transition shadow-lg shadow-emerald-200">太棒了！</button>
+        </div>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboardModal" class="fixed inset-0 bg-slate-100 z-[60] hidden overflow-hidden">
+        <div class="max-w-md mx-auto h-full bg-white shadow-xl relative flex flex-col">
+            <div class="bg-white/90 backdrop-blur-sm border-b border-slate-100 p-4 flex justify-between items-center z-10 flex-shrink-0">
+                <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2"><i data-lucide="bar-chart-2" class="w-5 h-5 text-emerald-600"></i> 年度戰情分析</h2>
+                <button onclick="closeDashboard()" class="p-2 bg-slate-100 rounded-full hover:bg-slate-200 transition"><i data-lucide="x" class="w-5 h-5 text-slate-500"></i></button>
+            </div>
+            <div class="p-4 space-y-6 flex-1 overflow-y-auto pb-10">
+                <!-- Asset Overview -->
+                <div class="bg-gradient-to-br from-slate-800 to-slate-700 rounded-2xl p-5 text-white shadow-lg">
+                    <h3 class="text-xs font-bold text-slate-300 mb-4 flex items-center gap-1"><i data-lucide="wallet" class="w-3 h-3"></i> 資產體質概況</h3>
+                    <div class="grid grid-cols-2 gap-6 relative">
+                        <div class="flex flex-col">
+                            <span class="text-[10px] text-slate-400 mb-1">總投入成本 (預估)</span>
+                            <span class="text-2xl font-bold tracking-tight text-white" id="dashTotalInvest">NT$ 0</span>
+                        </div>
+                        <div class="flex flex-col">
+                            <span class="text-[10px] text-slate-400 mb-1">今年預估總配息</span>
+                            <span class="text-2xl font-bold tracking-tight text-emerald-400" id="dashTotalDividend">NT$ 0</span>
+                        </div>
+                        <!-- Divider -->
+                        <div class="absolute left-1/2 top-2 bottom-2 w-px bg-white/10"></div>
+                    </div>
+                    <div class="mt-4 pt-4 border-t border-white/10 flex justify-between items-center">
+                        <span class="text-xs text-slate-400">預估年化殖利率 (YoC)</span>
+                        <span class="text-xl font-bold text-yellow-400" id="dashYield">0%</span>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-sm font-bold text-slate-500 mb-3">現金流波浪 (今年 vs 去年)</h3>
+                    <div class="relative h-48 w-full"><canvas id="barChart"></canvas></div>
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-slate-500 mb-3">現金流貢獻 & 殖利率排行</h3>
+                    <div class="relative h-64 w-full flex justify-center mb-4"><canvas id="pieChart"></canvas></div>
+                    <div class="flex justify-center mb-4">
+                        <div class="bg-slate-100 p-1 rounded-lg flex text-xs font-medium">
+                            <button onclick="setRankingMode('contribution')" id="btn-rank-contrib" class="px-3 py-1.5 rounded-md bg-white shadow-sm text-slate-700 transition">依貢獻</button>
+                            <button onclick="setRankingMode('yield')" id="btn-rank-yield" class="px-3 py-1.5 rounded-md text-slate-400 hover:text-slate-600 transition">依殖利率</button>
+                            <!-- NEW BUTTON -->
+                            <button onclick="setRankingMode('invested')" id="btn-rank-invested" class="px-3 py-1.5 rounded-md text-slate-400 hover:text-slate-600 transition">依資金</button>
+                        </div>
+                    </div>
+                    <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-3 text-[10px] text-yellow-800 flex items-center gap-2">
+                        <i data-lucide="info" class="w-4 h-4"></i> 提示：殖利率 = 該年度總配息 / 該年度加權平均持有成本
+                    </div>
+                    <div id="contributorsList" class="space-y-2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stock History & Yield -->
+    <div id="historyModal" class="fixed inset-0 bg-black/50 z-[70] hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-sm h-[90vh] sm:max-h-[85vh] flex flex-col shadow-xl slide-down overflow-hidden">
+            <div class="p-4 border-b border-slate-100 flex justify-between items-center flex-shrink-0">
+                <div><h3 id="historyTitle" class="text-lg font-bold text-slate-800"></h3><p id="historySubtitle" class="text-xs text-slate-500">領息紀錄</p></div>
+                <button onclick="closeHistory()" class="p-2 hover:bg-slate-100 rounded-full"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            <div class="p-4 flex justify-around text-center border-b border-slate-100 flex-shrink-0">
+                <div><p class="text-xs text-slate-400">歷史總領</p><p id="historyTotal" class="text-xl font-bold text-slate-700">NT$ 0</p></div>
+                <div><p class="text-xs text-slate-400">平均每次</p><p id="historyAvg" class="text-xl font-bold text-slate-700">NT$ 0</p></div>
+            </div>
+            <div id="historyList" class="flex-1 overflow-y-auto p-4 space-y-2"></div>
+        </div>
+    </div>
+
+    <!-- Stock Add Modal -->
+    <div id="stockModal" class="fixed inset-0 bg-black/50 z-[60] hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-sm p-6 shadow-xl slide-down max-h-[85vh] flex flex-col">
+            <h3 class="text-lg font-bold mb-4 text-slate-700 flex-shrink-0">新增存股標的</h3>
+            <div class="space-y-4 flex-1 overflow-y-auto pr-1">
+                <div><label class="block text-sm text-slate-500 mb-1">代號</label><input type="text" id="newStockCode" class="w-full bg-slate-100 border-none rounded-lg p-3 outline-none" placeholder="例如：00878"></div>
+                <div><label class="block text-sm text-slate-500 mb-1">名稱</label><input type="text" id="newStockName" class="w-full bg-slate-100 border-none rounded-lg p-3 outline-none" placeholder="例如：國泰永續高股息"></div>
+                <div>
+                    <label class="block text-sm text-slate-500 mb-2">配息月份 (選填)</label>
+                    <div class="grid grid-cols-6 gap-2" id="monthSelector"></div>
+                    <p class="text-[10px] text-slate-400 mt-1">勾選後，將直接顯示在該月份的快捷鍵中。</p>
+                </div>
+                <button onclick="addNewStockType()" class="w-full bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-700 transition">加入存股池</button>
+                <div class="border-t border-slate-100 pt-3">
+                    <p class="text-xs text-slate-400 mb-2">或點擊下方查看領息紀錄：</p>
+                    <div id="stockListInModal" class="flex flex-wrap gap-2 max-h-32 overflow-y-auto"></div>
+                </div>
+            </div>
+            <button onclick="closeStockModal()" class="w-full mt-4 text-slate-400 py-2 text-sm hover:text-slate-600 flex-shrink-0">關閉</button>
+        </div>
+    </div>
+
+    <script nonce="MzIxNjk2NzQ4LDIzMDc0NDUwODE=">
+        // --- Smart Seed Data (Real Stocks, Dummy Values) ---
+        const initialStockDefinitions = [
+            { code: "0056", name: "元大高股息", months: [1, 4, 7, 10] },
+            { code: "00878", name: "國泰永續高股息", months: [2, 5, 8, 11] },
+            { code: "00929", name: "復華台灣科技優息", months: [1,2,3,4,5,6,7,8,9,10,11,12] },
+            { code: "00919", name: "群益台灣精選高息", months: [3, 6, 9, 12] },
+            { code: "00940", name: "元大台灣價值高息", months: [1,2,3,4,5,6,7,8,9,10,11,12] },
+            { code: "00713", name: "元大台灣高息低波", months: [3, 6, 9, 12] },
+            { code: "00850", name: "元大臺灣ESG永續", months: [2, 5, 8, 11] },
+            { code: "00915", name: "凱基優選高股息30", months: [3, 6, 9, 12] },
+            { code: "00918", name: "大華優利高填息30", months: [3, 6, 9, 12] },
+            { code: "0050", name: "元大台灣50", months: [1, 7] }
+        ];
+
+        let dummyTransactions = [];
+        const currentY = new Date().getFullYear();
+        // Generate Safe String IDs for dummy data to avoid float precision issues in HTML
+        [1, 4, 7, 10].forEach((m, i) => dummyTransactions.push({ id: `seed_0056_${m}_${i}`, code: "0056", name: "元大高股息", year: currentY, month: m, shares: 3, dividend: 1.0, actual: 2990, cost_at_time: 35 }));
+        [2, 5, 8, 11].forEach((m, i) => dummyTransactions.push({ id: `seed_00878_${m}_${i}`, code: "00878", name: "國泰永續高股息", year: currentY, month: m, shares: 5, dividend: 0.5, actual: 2490, cost_at_time: 22 }));
+        for(let m=1; m<=12; m++) { dummyTransactions.push({ id: `seed_00929_${m}`, code: "00929", name: "復華台灣科技優息", year: currentY, month: m, shares: 20, dividend: 0.1, actual: 1990, cost_at_time: 18 }); }
+        [3, 6, 9, 12].forEach((m, i) => dummyTransactions.push({ id: `seed_00919_${m}_${i}`, code: "00919", name: "群益台灣精選高息", year: currentY, month: m, shares: 2, dividend: 0.7, actual: 1390, cost_at_time: 24 }));
+
+        let transactions = [];
+        let stockTypes = [];
+        let stockMonthMap = {};
+        let stockConfigs = {};
+        let calculatedAchievements = {};
+        let currentYear = new Date().getFullYear();
+        let activeMonth = null;
+        let showAllMap = {};
+        let charts = { bar: null, pie: null };
+        let activeHistoryCode = null;
+        let returnToDashboard = false;
+        let rankingMode = 'contribution'; 
+        let isHeaderCollapsed = false;
+
+        const milestones = [
+            { level: 5, amount: 5000, title: "存股新手村畢業", desc: "足以支付水電費與手機費", icon: "🥉" },
+            { level: 10, amount: 10000, title: "加薪不求人", desc: "相當於每年多領幾個月年終", icon: "🥈" },
+            { level: 20, amount: 20000, title: "成為偽房東", desc: "這筆錢等於在收租金了", icon: "🏠" },
+            { level: 30, amount: 30000, title: "領薪不求人", desc: "已超越國民最低薪資", icon: "💰" },
+            { level: 40, amount: 40000, title: "用餐自由", desc: "吃什麼完全不用看價錢", icon: "🍽️" },
+            { level: 50, amount: 50000, title: "個人財富自由啦", desc: "完全Cover生活開銷", icon: "💎" },
+            { level: 60, amount: 60000, title: "小康生活無憂", desc: "生活品質大幅提升", icon: "🚗" },
+            { level: 70, amount: 70000, title: "七是個幸運數字", desc: "未來會愈來好", icon: "🍀" }
+        ];
+
+        function init() {
+            const savedHeaderState = localStorage.getItem('header_collapsed');
+            isHeaderCollapsed = savedHeaderState === 'true';
+            updateHeaderUI();
+
+            const storedConfigs = localStorage.getItem('dividend_configs');
+            if(storedConfigs) stockConfigs = JSON.parse(storedConfigs);
+            else {
+                initialStockDefinitions.forEach(def => { stockConfigs[def.code] = { name: def.name, hidden: false, manualMonths: def.months }; });
+                localStorage.setItem('dividend_configs', JSON.stringify(stockConfigs));
+            }
+
+            const storedData = localStorage.getItem('dividend_transactions');
+            if (storedData) transactions = JSON.parse(storedData);
+            else { transactions = dummyTransactions; saveData(); }
+            
+            // --- CRITICAL FIX 2.0: Deduplicate and Regenerate IDs ---
+            if (transactions.length > 0) {
+                const idSet = new Set();
+                let hasChanges = false;
+                transactions.forEach((t, index) => {
+                    if (!t.id || typeof t.id === 'number' || idSet.has(t.id)) {
+                        t.id = `tx_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 5)}`;
+                        hasChanges = true;
+                    }
+                    idSet.add(t.id);
+                });
+                if (hasChanges) saveData();
+            }
+
+            const storedDates = localStorage.getItem('dividend_achievements');
+            if(storedDates) calculatedAchievements = JSON.parse(storedDates);
+
+            if(transactions.length > 0) {
+                const years = transactions.map(t => t.year);
+                const modeYear = years.sort((a,b) => years.filter(v => v===a).length - years.filter(v => v===b).length).pop();
+                const thisYear = new Date().getFullYear();
+                currentYear = years.includes(thisYear) ? thisYear : (modeYear || thisYear);
+            }
+
+            analyzeStockData();
+            recalculateAchievements();
+            render();
+            lucide.createIcons();
+            
+            const stats = calculateStats(currentYear);
+            const initialLevel = Math.max(0, Math.floor(stats.average / 1000));
+            localStorage.setItem('last_known_level', initialLevel);
+            
+            initMonthSelector();
+        }
+
+        function saveData() {
+            localStorage.setItem('dividend_transactions', JSON.stringify(transactions));
+            localStorage.setItem('dividend_configs', JSON.stringify(stockConfigs));
+            localStorage.setItem('dividend_achievements', JSON.stringify(calculatedAchievements));
+            analyzeStockData();
+            recalculateAchievements();
+            render();
+            checkLevelUp();
+            triggerBackupReminder();
+        }
+
+        function triggerBackupReminder() {
+            const lastRemind = localStorage.getItem('last_backup_reminder_date');
+            const today = new Date().toDateString();
+            if (lastRemind !== today) {
+                showToast("記得備份資料喔！(設定 -> 備份)");
+                localStorage.setItem('last_backup_reminder_date', today);
+            }
+        }
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toastMessage').textContent = msg;
+            toast.classList.add('show');
+            setTimeout(() => { toast.classList.remove('show'); }, 4000);
+        }
+
+        function calculateActual(shares, dividend) {
+            if (!shares || !dividend) return 0;
+            const gross = shares * dividend * 1000;
+            const net = Math.round(gross - 10); 
+            return net > 0 ? net : 0;
+        }
+
+        function analyzeStockData() {
+            const typeMap = new Map();
+            const monthMap = {}; 
+            transactions.forEach(t => {
+                if (!typeMap.has(t.code)) typeMap.set(t.code, t.name);
+                if (!monthMap[t.code]) monthMap[t.code] = new Set();
+                monthMap[t.code].add(t.month);
+            });
+            Object.keys(stockConfigs).forEach(code => {
+                const conf = stockConfigs[code];
+                if (!typeMap.has(code) && conf.name) typeMap.set(code, conf.name);
+                if(conf.manualMonths) {
+                    if (!monthMap[code]) monthMap[code] = new Set();
+                    conf.manualMonths.forEach(m => monthMap[code].add(m));
+                }
+            });
+            stockTypes = Array.from(typeMap, ([code, name]) => ({ code, name }));
+            stockTypes.sort((a, b) => a.code.localeCompare(b.code));
+            stockMonthMap = monthMap;
+        }
+
+        function getLastCost(code) {
+            const history = transactions.filter(t => t.code === code && t.cost_at_time).sort((a, b) => {
+                if (a.year !== b.year) return b.year - a.year;
+                return b.month - a.month;
+            });
+            return history.length > 0 ? history[0].cost_at_time : '';
+        }
+        
+        function getLastDividend(code) {
+            const history = transactions.filter(t => t.code === code && t.dividend).sort((a, b) => {
+                if (a.year !== b.year) return b.year - a.year;
+                return b.month - a.month;
+            });
+            return history.length > 0 ? history[0].dividend : '';
+        }
+
+        function getLastShares(code, excludeId = null) {
+            const history = transactions.filter(t => t.code === code && t.id !== excludeId).sort((a, b) => { if (a.year !== b.year) return b.year - a.year; return b.month - a.month; });
+            return history.length > 0 ? history[0].shares : '';
+        }
+
+        // --- New Function: Calculate Portfolio Cost ---
+        function getLatestStockInfo(code) {
+            const txs = transactions.filter(t => t.code === code);
+            if (txs.length === 0) return { shares: 0, cost: 0, investedAmount: 0 };
+            
+            // Sort to find the latest state
+            txs.sort((a, b) => (b.year - a.year) || (b.month - a.month));
+            const latest = txs[0];
+            
+            const cost = parseFloat(latest.cost_at_time) || 0;
+            const shares = parseFloat(latest.shares) || 0;
+            
+            return {
+                shares,
+                cost,
+                investedAmount: Math.round(shares * cost * 1000)
+            };
+        }
+
+        function calculatePortfolioStats() {
+            let totalInvested = 0;
+            const stockInvestments = {};
+            
+            stockTypes.forEach(stock => {
+                const info = getLatestStockInfo(stock.code);
+                stockInvestments[stock.code] = info;
+                totalInvested += info.investedAmount;
+            });
+            
+            return { totalInvested, stockInvestments };
+        }
+        // ----------------------------------------------
+
+        function calculateStats(targetYear) {
+            const now = new Date();
+            const realCurrentYear = now.getFullYear();
+            const realCurrentMonth = now.getMonth() + 1;
+            let ytdTotal = 0, yearTotal = 0, divisor = 0;
+            if (targetYear < realCurrentYear) divisor = 12;
+            else if (targetYear === realCurrentYear) divisor = realCurrentMonth;
+            else divisor = 0;
+            transactions.forEach(t => {
+                if (t.year === targetYear) {
+                    yearTotal += t.actual;
+                    if (targetYear < realCurrentYear) ytdTotal += t.actual;
+                    else if (targetYear === realCurrentYear && t.month <= realCurrentMonth) ytdTotal += t.actual;
+                }
+            });
+            const average = divisor > 0 ? Math.round(ytdTotal / divisor) : 0;
+            return { ytdTotal, yearTotal, average, divisor };
+        }
+
+        function recalculateAchievements() {
+            if (transactions.length === 0) { calculatedAchievements = {}; return; }
+            const newAchievements = {};
+            const years = [...new Set(transactions.map(t => t.year))].sort((a,b) => a - b);
+            years.forEach(y => {
+                for (let m = 1; m <= 12; m++) {
+                    const txs = transactions.filter(t => t.year === y && t.month <= m);
+                    if(txs.length === 0) continue; 
+                    const sum = txs.reduce((acc, t) => acc + t.actual, 0);
+                    const avg = Math.round(sum / m);
+                    const lvl = Math.floor(avg / 1000);
+                    milestones.forEach(ms => {
+                        if (lvl >= ms.level && !newAchievements[ms.level]) {
+                            newAchievements[ms.level] = `${y}年${m}月`;
+                        }
+                    });
+                }
+            });
+            calculatedAchievements = newAchievements;
+        }
+
+        function checkLevelUp() {
+            const now = new Date();
+            const stats = calculateStats(now.getFullYear());
+            const currentLevel = Math.max(0, Math.floor(stats.average / 1000));
+            const lastKnownLevel = parseInt(localStorage.getItem('last_known_level') || 0);
+            if (currentLevel > lastKnownLevel) {
+                localStorage.setItem('last_known_level', currentLevel);
+                showLevelUpModal(lastKnownLevel, currentLevel);
+                launchConfetti();
+            }
+        }
+
+        function toggleHeader() {
+            isHeaderCollapsed = !isHeaderCollapsed;
+            localStorage.setItem('header_collapsed', isHeaderCollapsed);
+            updateHeaderUI();
+        }
+
+        function updateHeaderUI() {
+            const expandedDiv = document.getElementById('headerExpanded');
+            const collapsedDiv = document.getElementById('headerCollapsed');
+            // FIX: Target the button container instead of the icon directly to handle re-rendering safely
+            const btn = document.getElementById('headerToggleBtn');
+            
+            if (isHeaderCollapsed) {
+                expandedDiv.classList.add('hidden');
+                collapsedDiv.classList.remove('hidden');
+                if(btn) btn.innerHTML = `<i data-lucide="chevron-down" class="w-4 h-4"></i>`;
+            } else {
+                expandedDiv.classList.remove('hidden');
+                collapsedDiv.classList.add('hidden');
+                if(btn) btn.innerHTML = `<i data-lucide="chevron-up" class="w-4 h-4"></i>`;
+            }
+            lucide.createIcons();
+        }
+
+        function render() {
+            document.getElementById('yearDisplay').textContent = currentYear;
+            const container = document.getElementById('monthContainer');
+            container.innerHTML = '';
+            
+            // --- Calc Logic Update ---
+            const stats = calculateStats(currentYear);
+            const portfolio = calculatePortfolioStats();
+            // -------------------------
+
+            document.getElementById('currentMonthDisplay').textContent = stats.divisor > 0 ? stats.divisor : "-";
+            document.getElementById('ytdTotal').textContent = `NT$ ${stats.ytdTotal.toLocaleString()}`;
+            document.getElementById('fullYearTotal').textContent = `NT$ ${stats.yearTotal.toLocaleString()}`;
+            document.getElementById('monthAvg').textContent = `NT$ ${stats.average.toLocaleString()}`;
+            document.getElementById('monthAvgCollapsed').textContent = `NT$ ${stats.average.toLocaleString()}`;
+            
+            // Display Total Invested in Header
+            document.getElementById('totalInvestedCost').textContent = `NT$ ${portfolio.totalInvested.toLocaleString()}`;
+
+            const level = Math.max(0, Math.floor(stats.average / 1000));
+            const progress = ((stats.average % 1000) / 1000) * 100;
+            const gap = 1000 - (stats.average % 1000);
+            document.getElementById('currentLevelDisplay').textContent = level;
+            document.getElementById('currentLevelDisplayCollapsed').textContent = level;
+            document.getElementById('levelProgressBar').style.width = `${progress}%`;
+            document.getElementById('nextLevelGap').textContent = `NT$ ${gap.toLocaleString()}`;
+            let currentTitle = "存股初心者";
+            const unlocked = milestones.filter(m => level >= m.level).pop();
+            if (unlocked) currentTitle = unlocked.title;
+            document.getElementById('currentTitleDisplay').textContent = currentTitle;
+            document.getElementById('currentTitleDisplayCollapsed').textContent = currentTitle;
+
+            for (let m = 1; m <= 12; m++) {
+                const monthData = transactions.filter(t => t.year === currentYear && t.month === m);
+                const monthTotal = monthData.reduce((sum, t) => sum + t.actual, 0);
+                const lastYearTotal = transactions.filter(t => t.year === currentYear - 1 && t.month === m).reduce((sum, t) => sum + t.actual, 0);
+                const diff = monthTotal - lastYearTotal;
+                const now = new Date();
+                const isFuture = (currentYear > now.getFullYear()) || (currentYear === now.getFullYear() && m > now.getMonth() + 1);
+                const isExpanded = activeMonth === m;
+                const section = document.createElement('div');
+                section.className = `bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden transition-all duration-300 ${isExpanded ? 'ring-2 ring-emerald-500/20' : ''}`;
+                let diffHtml = '';
+                if (!isFuture && lastYearTotal > 0) {
+                    const sign = diff >= 0 ? '+' : '';
+                    const color = diff >= 0 ? 'text-rose-500' : 'text-emerald-500';
+                    diffHtml = `<span class="text-[10px] ${color} font-medium mr-2">(vs去年 ${sign}${diff.toLocaleString()})</span>`;
+                }
+                section.innerHTML = `<div class="p-4 flex justify-between items-center cursor-pointer select-none ${isExpanded ? 'bg-slate-50' : 'hover:bg-slate-50'}" onclick="toggleMonth(${m})"><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-full flex items-center justify-center font-bold ${isFuture ? 'text-slate-400 bg-slate-50' : 'text-slate-600 bg-emerald-50'}">${m}</div><div class="flex flex-col"><div class="flex flex-col items-start"><span class="font-bold ${isFuture ? 'text-slate-400' : 'text-slate-700'}">配息</span><span class="font-bold ${isFuture ? 'text-slate-400' : 'text-slate-700'}">總額</span></div></div></div><div class="flex items-center gap-2">${diffHtml}<span class="font-mono font-bold ${isFuture ? 'text-slate-400' : 'text-emerald-600'} text-lg">NT$ ${monthTotal.toLocaleString()}</span><i data-lucide="${isExpanded ? 'chevron-up' : 'chevron-down'}" class="w-4 h-4 text-slate-400"></i></div></div>`;
+                if (isExpanded) {
+                    const content = document.createElement('div');
+                    content.className = "p-4 border-t border-slate-100 bg-slate-50/50 slide-down";
+                    const chipsContainer = document.createElement('div');
+                    chipsContainer.className = "flex flex-wrap gap-2 mb-4";
+                    const visibleTypes = stockTypes.filter(s => { return !stockConfigs[s.code]?.hidden; });
+                    const likelyStocks = visibleTypes.filter(s => stockMonthMap[s.code] && stockMonthMap[s.code].has(m));
+                    const otherStocks = visibleTypes.filter(s => !stockMonthMap[s.code] || !stockMonthMap[s.code].has(m));
+                    const isShowingAll = showAllMap[m];
+                    const stocksToShow = isShowingAll ? [...likelyStocks, ...otherStocks] : likelyStocks;
+                    if (stocksToShow.length === 0 && !isShowingAll) chipsContainer.innerHTML = `<span class="text-xs text-slate-400 italic">本月歷史無配息紀錄</span>`;
+                    stocksToShow.forEach(stock => {
+                        const isLikely = likelyStocks.includes(stock);
+                        const btn = document.createElement('button');
+                        btn.className = `px-3 py-1.5 border rounded-full text-xs font-medium shadow-sm active:scale-95 transition chip-enter ${isLikely ? 'bg-white border-slate-200 text-slate-700 hover:border-emerald-500 hover:text-emerald-600' : 'bg-slate-100 border-transparent text-slate-500 hover:bg-white hover:border-slate-300'}`;
+                        btn.textContent = `${stock.code} ${stock.name}`;
+                        btn.onclick = () => addTransaction(stock.code, stock.name, m);
+                        chipsContainer.appendChild(btn);
+                    });
+                    if (otherStocks.length > 0) {
+                        const moreBtn = document.createElement('button');
+                        moreBtn.className = "px-3 py-1.5 bg-slate-100 rounded-full text-xs font-medium text-slate-400 hover:bg-slate-200 transition flex items-center gap-1";
+                        moreBtn.innerHTML = isShowingAll ? `收起 <i data-lucide="chevron-up" class="w-3 h-3"></i>` : `+ 其他 (${otherStocks.length}) <i data-lucide="chevron-down" class="w-3 h-3"></i>`;
+                        moreBtn.onclick = () => toggleShowAll(m);
+                        chipsContainer.appendChild(moreBtn);
+                    }
+                    content.appendChild(chipsContainer);
+                    const cardsContainer = document.createElement('div');
+                    cardsContainer.className = "space-y-3";
+                    monthData.forEach(t => {
+                        const card = document.createElement('div');
+                        card.className = "bg-white p-3 rounded-xl border border-slate-200 shadow-sm relative group";
+                        const costValue = (t.cost_at_time !== undefined && t.cost_at_time !== null) ? t.cost_at_time : '';
+                        
+                        card.innerHTML = `
+                            <div class="flex justify-between items-start mb-2 pr-12">
+                                <div>
+                                    <span class="text-xs font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">${t.code}</span>
+                                    <span class="text-sm font-bold text-slate-700 ml-1 cursor-pointer hover:text-emerald-600" onclick="showHistory('${t.code}')">${t.name}</span>
+                                </div>
+                                <div class="absolute top-2 right-2 flex gap-1">
+                                    <button onclick="showHistory('${t.code}')" class="text-slate-300 hover:text-emerald-500 p-1"><i data-lucide="history" class="w-4 h-4"></i></button>
+                                    <button onclick="deleteTransaction('${t.id}')" class="text-slate-300 hover:text-red-500 p-1"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2 mb-2">
+                                <div><label class="block text-[10px] text-slate-400 mb-0.5">持有張數</label><input type="number" step="0.001" value="${t.shares}" class="w-full bg-slate-50 border border-slate-200 rounded px-1 py-1 text-sm font-mono focus:border-emerald-500 outline-none" onchange="updateTxValue('${t.id}', 'shares', this.value)"></div>
+                                <div><label class="block text-[10px] text-slate-400 mb-0.5">本次配息(元)</label><input type="number" step="0.01" value="${t.dividend}" class="w-full bg-slate-50 border border-slate-200 rounded px-1 py-1 text-sm font-mono focus:border-emerald-500 outline-none" onchange="updateTxValue('${t.id}', 'dividend', this.value)"></div>
+                                <div><label class="block text-[10px] text-slate-400 mb-0.5">平均成本(元)</label><input type="number" step="0.01" value="${costValue}" placeholder="選填" class="w-full bg-slate-50 border border-slate-200 rounded px-1 py-1 text-sm font-mono focus:border-emerald-500 outline-none placeholder:text-xs" onchange="updateTxValue('${t.id}', 'cost_at_time', this.value)"></div>
+                            </div>
+                            <div class="flex justify-between items-center pt-2 border-t border-slate-100">
+                                <span class="text-xs text-slate-400">實領 (扣匯費10元)</span>
+                                <span class="font-bold text-emerald-600">NT$ ${t.actual.toLocaleString()}</span>
+                            </div>
+                        `;
+                        cardsContainer.appendChild(card);
+                    });
+                    if (monthData.length === 0) { const emptyHint = document.createElement('div'); emptyHint.className = "text-center py-6 text-slate-400 text-xs"; emptyHint.textContent = "點擊上方股票代號以新增紀錄"; cardsContainer.appendChild(emptyHint); }
+                    content.appendChild(cardsContainer);
+                    section.appendChild(content);
+                }
+                container.appendChild(section);
+            }
+            setTimeout(() => lucide.createIcons(), 50);
+        }
+
+        function changeYear(delta) { currentYear += delta; render(); }
+        function toggleMonth(m) { activeMonth = activeMonth === m ? null : m; render(); }
+        function toggleShowAll(m) { showAllMap[m] = !showAllMap[m]; render(); }
+        
+        function addTransaction(code, name, month) { 
+            const lastShares = getLastShares(code); 
+            // Auto-fill Logic
+            const lastCost = getLastCost(code);
+            const lastDividend = getLastDividend(code);
+            
+            transactions.push({ 
+                // Fix: Use Safe String ID with random component to prevent any chance of collision
+                id: `tx_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`, 
+                code, name, year: currentYear, month, 
+                shares: lastShares || 0, 
+                dividend: lastDividend || 0, 
+                cost_at_time: lastCost || '', 
+                actual: calculateActual(lastShares || 0, lastDividend || 0) 
+            }); 
+            saveData(); 
+        }
+        
+        function updateTxValue(id, field, value) { 
+            const tx = transactions.find(t => t.id === id); 
+            if (tx) { 
+                const val = parseFloat(value);
+                if (field === 'cost_at_time') {
+                    tx[field] = isNaN(val) ? '' : val;
+                } else {
+                    tx[field] = isNaN(val) ? 0 : val; 
+                }
+
+                // If modifying shares/dividend, recalc actual
+                if(field === 'shares' || field === 'dividend') {
+                    tx.actual = calculateActual(tx.shares, tx.dividend); 
+                }
+                saveData(); 
+            } 
+        }
+        function deleteTransaction(id) { if(confirm('確定刪除？')) { transactions = transactions.filter(t => t.id !== id); saveData(); } }
+
+        function openSettings() { document.getElementById('settingsModal').classList.remove('hidden'); }
+        function closeSettings() { document.getElementById('settingsModal').classList.add('hidden'); }
+        function openStockManager() { closeSettings(); document.getElementById('stockManagerModal').classList.remove('hidden'); renderStockManager(); }
+        function closeStockManager() { document.getElementById('stockManagerModal').classList.add('hidden'); }
+        function renderStockManager() {
+            const list = document.getElementById('stockManagerList'); list.innerHTML = '';
+            stockTypes.forEach(s => {
+                const isHidden = stockConfigs[s.code]?.hidden || false;
+                const div = document.createElement('div');
+                div.className = `flex justify-between items-center p-3 rounded-lg border ${isHidden ? 'bg-slate-100 border-slate-200' : 'bg-white border-slate-200'}`;
+                div.innerHTML = `<div class="${isHidden ? 'opacity-50' : ''}"><div class="font-bold text-sm text-slate-700">${s.code} ${s.name}</div><div class="text-[10px] text-slate-400">${isHidden ? '已隱藏' : '顯示中'}</div></div><button onclick="toggleStockHidden('${s.code}')" class="text-xs px-3 py-1.5 rounded-full font-bold transition ${isHidden ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-100 text-slate-500'}">${isHidden ? '顯示' : '隱藏'}</button>`;
+                list.appendChild(div);
+            });
+        }
+        function toggleStockHidden(code) { if(!stockConfigs[code]) stockConfigs[code] = {}; stockConfigs[code].hidden = !stockConfigs[code].hidden; saveData(); renderStockManager(); }
+        function openClearDataModal() { document.getElementById('settingsModal').classList.add('hidden'); document.getElementById('clearDataModal').classList.remove('hidden'); document.getElementById('clearDataInput').value = ''; }
+        function closeClearDataModal() { document.getElementById('clearDataModal').classList.add('hidden'); }
+        function executeClearData() {
+            const inputVal = document.getElementById('clearDataInput').value;
+            if (inputVal === "清除") {
+                transactions = []; calculatedAchievements = {};
+                localStorage.removeItem('dividend_transactions'); localStorage.removeItem('dividend_costs'); localStorage.removeItem('last_known_level'); localStorage.removeItem('dividend_achievements');
+                saveData(); closeClearDataModal(); alert("清除成功！交易紀錄已清空，但您的存股池清單已保留。"); location.reload(); 
+            } else { alert("驗證失敗：請輸入「清除」二字以確認執行。"); }
+        }
+
+        function openDashboard() { document.getElementById('dashboardModal').classList.remove('hidden'); renderCharts(); }
+        function closeDashboard() { document.getElementById('dashboardModal').classList.add('hidden'); }
+        function setRankingMode(mode) {
+            rankingMode = mode;
+            const btnContrib = document.getElementById('btn-rank-contrib');
+            const btnYield = document.getElementById('btn-rank-yield');
+            const btnInvested = document.getElementById('btn-rank-invested');
+            
+            // Reset all to default
+            const inactiveClass = "px-3 py-1.5 rounded-md text-slate-400 hover:text-slate-600 transition";
+            const activeClass = "px-3 py-1.5 rounded-md bg-white shadow-sm text-slate-700 transition font-bold";
+            
+            btnContrib.className = inactiveClass;
+            btnYield.className = inactiveClass;
+            btnInvested.className = inactiveClass;
+
+            if(mode === 'contribution') btnContrib.className = activeClass;
+            else if(mode === 'yield') btnYield.className = activeClass;
+            else if(mode === 'invested') btnInvested.className = activeClass;
+
+            renderContributorsList(); 
+        }
+        function renderCharts() {
+            const months = Array.from({length: 12}, (_, i) => `${i+1}月`);
+            const currentData = Array(12).fill(0); const lastYearData = Array(12).fill(0); const stockContribution = {};
+            transactions.forEach(t => { if (t.year === currentYear) { currentData[t.month - 1] += t.actual; stockContribution[t.code] = (stockContribution[t.code] || 0) + t.actual; } else if (t.year === currentYear - 1) { lastYearData[t.month - 1] += t.actual; } });
+            
+            // --- Chart Data Update ---
+            const portfolio = calculatePortfolioStats();
+            document.getElementById('dashTotalInvest').textContent = `NT$ ${portfolio.totalInvested.toLocaleString()}`;
+            const totalDividend = currentData.reduce((a,b)=>a+b,0);
+            document.getElementById('dashTotalDividend').textContent = `NT$ ${totalDividend.toLocaleString()}`;
+            
+            const yieldVal = portfolio.totalInvested > 0 ? ((totalDividend / portfolio.totalInvested) * 100).toFixed(1) : 0;
+            document.getElementById('dashYield').textContent = `${yieldVal}%`;
+            // -------------------------
+
+            if (charts.bar) charts.bar.destroy();
+            charts.bar = new Chart(document.getElementById('barChart').getContext('2d'), { type: 'bar', data: { labels: months, datasets: [ { label: `${currentYear}年`, data: currentData, backgroundColor: '#10b981', borderRadius: 4 }, { label: `${currentYear-1}年`, data: lastYearData, backgroundColor: '#cbd5e1', borderRadius: 4 } ] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } }, scales: { y: { beginAtZero: true, grid: { display: false } }, x: { grid: { display: false } } } } });
+            const sortedStocks = Object.entries(stockContribution).sort((a, b) => b[1] - a[1]);
+            const labels = sortedStocks.map(([code]) => code); const data = sortedStocks.map(([, val]) => val);
+            if (charts.pie) charts.pie.destroy();
+            charts.pie = new Chart(document.getElementById('pieChart').getContext('2d'), { type: 'doughnut', data: { labels: labels, datasets: [{ data: data, backgroundColor: ['#059669', '#10b981', '#34d399', '#6ee7b7', '#a7f3d0', '#0e7490', '#06b6d4', '#22d3ee', '#67e8f9', '#cffafe'], borderWidth: 0 }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, cutout: '70%' } });
+            renderContributorsList(stockContribution, currentData.reduce((a,b)=>a+b,0) || 1);
+        }
+        
+        function renderContributorsList(stockContributionData = null, totalActualData = null) {
+            let stockContribution = stockContributionData; let totalActual = totalActualData;
+            if(!stockContribution) { stockContribution = {}; let currentTotal = 0; transactions.forEach(t => { if (t.year === currentYear) { currentTotal += t.actual; stockContribution[t.code] = (stockContribution[t.code] || 0) + t.actual; } }); totalActual = currentTotal || 1; }
+            
+            const portfolio = calculatePortfolioStats(); // Get cost data
+
+            let items = Object.entries(stockContribution).map(([code, val]) => {
+                let yieldVal = 0; let lastYearYieldVal = 0;
+                
+                // Yield on Cost Logic: Total Dividend / Latest Total Invested Cost
+                // Use the latest holding cost as the denominator
+                const invested = portfolio.stockInvestments[code]?.investedAmount || 0;
+                
+                const myTx = transactions.filter(t => t.code === code && t.year === currentYear); 
+                const divSum = myTx.reduce((sum, t) => sum + t.dividend, 0); // Sum of dividend per share? No, actual is total cash.
+                // We need Total Cash Dividend for this stock this year
+                const totalCashDiv = myTx.reduce((sum, t) => sum + t.actual, 0);
+
+                if(invested > 0) {
+                    yieldVal = parseFloat(((totalCashDiv / invested) * 100).toFixed(1));
+                }
+
+                // Last Year comparison (Simplified for now)
+                return { code, val, yieldVal, lastYearYieldVal, invested };
+            });
+
+            if (rankingMode === 'yield') items.sort((a, b) => b.yieldVal - a.yieldVal); 
+            else if (rankingMode === 'invested') items.sort((a, b) => b.invested - a.invested);
+            else items.sort((a, b) => b.val - a.val);
+
+            const listEl = document.getElementById('contributorsList'); listEl.innerHTML = '';
+            items.forEach((item, idx) => {
+                const s = stockTypes.find(st => st.code === item.code); const percent = Math.round((item.val / totalActual) * 100);
+                let yieldBadge = '';
+                if(item.yieldVal > 0) { 
+                    let colorClass = 'bg-slate-100 text-slate-500'; 
+                    if(item.yieldVal > 8) colorClass = 'bg-rose-100 text-rose-600'; else if(item.yieldVal > 5) colorClass = 'bg-emerald-100 text-emerald-600'; 
+                    const fontWeight = rankingMode === 'yield' ? 'font-black text-sm' : 'font-bold text-[10px]'; 
+                    yieldBadge = `<span class="${fontWeight} px-1.5 py-0.5 rounded ${colorClass} mr-2">殖利率 ${item.yieldVal}%</span>`; 
+                } else {
+                    yieldBadge = `<span class="text-[10px] text-slate-300 mr-2">-</span>`;
+                }
+                
+                // Show Invested Amount
+                // Highlight invested amount if in 'invested' ranking mode
+                const investedClass = rankingMode === 'invested' ? 'bg-orange-100 text-orange-700 font-bold' : 'bg-slate-100 text-slate-500';
+                const investedStr = item.invested > 0 ? `已投入 $${(item.invested/10000).toFixed(1)}萬` : '成本未知';
+
+                const listDiv = document.createElement('div');
+                listDiv.className = "flex justify-between items-center text-sm p-2 bg-slate-50 rounded hover:bg-slate-100 cursor-pointer";
+                listDiv.onclick = () => showHistory(item.code, true);
+                const contribClass = rankingMode === 'contribution' ? 'text-emerald-600 font-bold' : 'text-slate-500 font-medium';
+                listDiv.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <span class="font-mono font-bold text-slate-400 w-4">${idx+1}</span>
+                        <div>
+                            <span class="font-bold text-slate-700 block leading-tight">${item.code} ${s?s.name:''}</span>
+                            <div class="flex gap-2 mt-0.5">
+                                <span class="text-[10px] text-slate-400 bg-slate-100 px-1 rounded">${percent}% 貢獻</span>
+                                <span class="text-[10px] px-1 rounded ${investedClass}">${investedStr}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex items-center">
+                        ${yieldBadge}
+                        <span class="font-mono ${contribClass}">NT$ ${item.val.toLocaleString()}</span>
+                    </div>`;
+                listEl.appendChild(listDiv);
+            });
+        }
+
+        function showHistory(code, fromDashboard = false) {
+            returnToDashboard = fromDashboard; if(fromDashboard) closeDashboard();
+            activeHistoryCode = code; const stockName = stockTypes.find(s => s.code === code)?.name || '';
+            document.getElementById('historyTitle').textContent = `${code} ${stockName}`;
+            document.getElementById('historyModal').classList.remove('hidden');
+            const history = transactions.filter(t => t.code === code).sort((a, b) => { if (a.year !== b.year) return b.year - a.year; return b.month - a.month; });
+            const total = history.reduce((sum, t) => sum + t.actual, 0); const avg = history.length > 0 ? Math.round(total / history.length) : 0;
+            document.getElementById('historyTotal').textContent = `NT$ ${total.toLocaleString()}`; document.getElementById('historyAvg').textContent = `NT$ ${avg.toLocaleString()}`;
+            const list = document.getElementById('historyList'); list.innerHTML = '';
+            history.forEach(t => {
+                const row = document.createElement('div');
+                row.className = "flex justify-between items-center py-2 border-b border-slate-50 last:border-0";
+                const costHtml = t.cost_at_time ? `<span class="text-[10px] text-slate-400 bg-slate-100 px-1 rounded ml-1">均價 ${t.cost_at_time}</span>` : '';
+                row.innerHTML = `
+                    <div class="flex flex-col gap-0.5">
+                        <div class="flex items-center gap-2"><span class="text-xs font-bold text-slate-400 bg-slate-100 px-1.5 rounded">${t.year}</span><span class="text-sm font-medium text-slate-600">${t.month}月</span><span class="text-xs text-slate-400">(${t.shares}張)</span></div>
+                        ${costHtml}
+                    </div>
+                    <span class="font-mono font-bold text-emerald-600">+ ${t.actual.toLocaleString()}</span>`;
+                list.appendChild(row);
+            });
+        }
+        
+        function closeHistory() { document.getElementById('historyModal').classList.add('hidden'); if(returnToDashboard) { returnToDashboard = false; openDashboard(); } }
+
+        function initMonthSelector() {
+            const div = document.getElementById('monthSelector'); div.innerHTML = '';
+            for(let i=1; i<=12; i++) { const label = document.createElement('label'); label.className = "flex items-center justify-center p-2 border border-slate-200 rounded cursor-pointer hover:bg-emerald-50 has-[:checked]:bg-emerald-100 has-[:checked]:border-emerald-500 has-[:checked]:text-emerald-700 transition"; label.innerHTML = `<input type="checkbox" value="${i}" class="hidden month-checkbox"><span class="text-xs font-bold">${i}月</span>`; div.appendChild(label); }
+        }
+        function openStockModal() {
+            document.getElementById('stockModal').classList.remove('hidden'); document.querySelectorAll('.month-checkbox').forEach(c => c.checked = false); 
+            const list = document.getElementById('stockListInModal'); list.innerHTML = '';
+            stockTypes.forEach(s => {
+                if(stockConfigs[s.code]?.hidden) return; 
+                const div = document.createElement('div');
+                div.className = "flex items-center gap-1 bg-slate-100 rounded pr-1 overflow-hidden";
+                div.innerHTML = `<button class="px-2 py-1 text-xs text-slate-600 hover:bg-emerald-100 hover:text-emerald-700 transition h-full" onclick="showHistory('${s.code}')">${s.code} ${s.name}</button><button class="px-1.5 py-1 text-slate-300 hover:text-red-500 hover:bg-red-50 h-full border-l border-white" onclick="deleteStockFromPool('${s.code}')"><i data-lucide="x" class="w-3 h-3"></i></button>`;
+                list.appendChild(div);
+            });
+            lucide.createIcons();
+        }
+        function closeStockModal() { document.getElementById('stockModal').classList.add('hidden'); }
+        function deleteStockFromPool(code) { if(confirm(`確定要從存股池中移除 ${code} 嗎？\n注意：這不會刪除已發生的交易紀錄，但會將其從快捷清單中移除。`)) { if(stockConfigs[code]) { delete stockConfigs[code]; saveData(); openStockModal(); render(); } } }
+        function addNewStockType() {
+            const code = document.getElementById('newStockCode').value.trim(); const name = document.getElementById('newStockName').value.trim();
+            const checkboxes = document.querySelectorAll('.month-checkbox:checked'); const selectedMonths = Array.from(checkboxes).map(c => parseInt(c.value));
+            if (code && name) { if(!stockConfigs[code]) stockConfigs[code] = {}; stockConfigs[code] = { name, hidden: false, manualMonths: selectedMonths }; saveData(); alert(`已加入存股池：${code} ${name}`); closeStockModal(); document.getElementById('newStockCode').value = ''; document.getElementById('newStockName').value = ''; render(); }
+        }
+
+        function exportData() {
+            const exportObj = { transactions, stockConfigs, achievementDates: calculatedAchievements }; 
+            const dataStr = JSON.stringify(exportObj, null, 2); const blob = new Blob([dataStr], { type: "application/json" }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `存股帳本備份_${new Date().toISOString().split('T')[0]}.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        }
+        function importDataTrigger() { document.getElementById('fileInput').click(); }
+        function importData(input) {
+            const file = input.files[0]; if (!file) return; const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const json = JSON.parse(e.target.result);
+                    if (Array.isArray(json)) { if(confirm('偵測到舊版備份檔，確定還原？')) { transactions = json; saveData(); alert('還原成功'); } } 
+                    else if (json.transactions) {
+                        if(confirm('確定還原備份資料？(將覆蓋現有紀錄)')) {
+                            transactions = json.transactions; if(json.stockConfigs) stockConfigs = json.stockConfigs; 
+                            saveData(); alert('還原成功');
+                        }
+                    }
+                } catch (err) { alert('檔案格式錯誤'); }
+            }; reader.readAsText(file);
+        }
+
+        function showLevelUpModal(prev, curr) {
+            document.getElementById('prevLevelDisplay').textContent = prev; document.getElementById('newLevelDisplay').textContent = curr;
+            const unlockedMilestone = milestones.find(m => m.level === curr); const titleSection = document.getElementById('unlockedTitleSection');
+            if (unlockedMilestone) { titleSection.classList.remove('hidden'); document.getElementById('unlockedTitleText').textContent = `${unlockedMilestone.icon} ${unlockedMilestone.title}`; document.getElementById('unlockedTitleDesc').textContent = unlockedMilestone.desc; } else { titleSection.classList.add('hidden'); }
+            document.getElementById('levelUpModal').classList.remove('hidden');
+        }
+        function closeLevelUp() { document.getElementById('levelUpModal').classList.add('hidden'); }
+        function launchConfetti() {
+            const duration = 2000; const end = Date.now() + duration;
+            (function frame() { confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 }, colors: ['#10b981', '#fbbf24'] }); confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 }, colors: ['#10b981', '#fbbf24'] }); if (Date.now() < end) { requestAnimationFrame(frame); } }());
+        }
+        function openAchievements() {
+            const list = document.getElementById('achievementsList'); list.innerHTML = '';
+            milestones.forEach(m => {
+                const unlockDate = calculatedAchievements[m.level];
+                const isUnlocked = !!unlockDate;
+                const item = document.createElement('div');
+                item.className = `flex items-center gap-4 p-4 rounded-xl border ${isUnlocked ? 'bg-gradient-to-r from-yellow-50 to-white border-yellow-200 shadow-sm' : 'bg-slate-50 border-slate-100 opacity-60 grayscale'}`;
+                let dateHtml = isUnlocked ? `<div class="text-[10px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full inline-block mt-1">🏆 ${unlockDate} 達成</div>` : '';
+                item.innerHTML = `<div class="w-12 h-12 rounded-full flex items-center justify-center text-2xl bg-white border ${isUnlocked ? 'border-yellow-200 shadow-inner' : 'border-slate-200'}">${isUnlocked ? m.icon : '🔒'}</div><div class="flex-1"><div class="flex justify-between items-center"><h4 class="font-bold text-slate-800 ${isUnlocked ? 'text-gold' : ''}">${m.title}</h4><span class="text-xs font-mono font-bold ${isUnlocked ? 'text-yellow-600' : 'text-slate-400'}\">Lv.${m.level}</span></div><p class="text-xs text-slate-500 mt-0.5">${m.desc}</p>${dateHtml}</div>`;
+                list.appendChild(item);
+            });
+            document.getElementById('achievementsModal').classList.remove('hidden');
+        }
+        function closeAchievements() { document.getElementById('achievementsModal').classList.add('hidden'); }
+
+        init();
+    </script>
+</body>
+</html>
