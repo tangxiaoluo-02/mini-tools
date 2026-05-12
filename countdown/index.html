@@ -16,7 +16,7 @@
         }
 
         .timer-display {
-            font-size: clamp(4rem, 22vw, 18rem);
+            font-size: clamp(4rem, 22vmin, 14rem);
             line-height: 1;
             transition: color 0.3s ease;
         }
@@ -79,14 +79,14 @@
         <div id="progress" class="progress-bar bg-emerald-500 w-full"></div>
     </div>
 
-    <!-- 計時顯示 -->
-    <div class="flex flex-col items-center mb-4">
+    <!-- 計時顯示（永遠垂直置中） -->
+    <div class="flex flex-col items-center">
         <div id="timer" class="timer-display status-green">00:00</div>
         <div id="overtime-label" class="text-xl font-bold text-red-500 opacity-0 uppercase tracking-widest">Time Over</div>
     </div>
 
-    <!-- 控制面板 -->
-    <div id="controls" class="w-full max-w-lg px-4 space-y-3">
+    <!-- 控制面板（fixed 在底部，不佔排版空間，數字才能真正垂直置中） -->
+    <div id="controls" class="fixed bottom-10 left-0 right-0 w-full max-w-lg mx-auto px-4 space-y-3">
 
         <!-- 預設時間 -->
         <div class="grid grid-cols-4 gap-2">
