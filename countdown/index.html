@@ -7,31 +7,28 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700&display=swap');
-        
+
         body {
             background-color: #0a0a0a;
             color: #ffffff;
-            font-family: 'JetBrains+Mono', monospace;
+            font-family: 'JetBrains Mono', monospace;
             overflow: hidden;
         }
 
         .timer-display {
-            font-size: 25vw;
+            font-size: clamp(4rem, 22vw, 18rem);
             line-height: 1;
             transition: color 0.3s ease;
         }
 
-        .status-green { color: #10b981; }
+        .status-green  { color: #10b981; }
         .status-yellow { color: #f59e0b; }
-        .status-red { color: #ef4444; }
-        
-        .overtime {
-            animation: blink 1s infinite;
-        }
+        .status-red    { color: #ef4444; }
 
+        .overtime { animation: blink 1s infinite; }
         @keyframes blink {
             0%, 100% { opacity: 1; }
-            50% { opacity: 0.3; }
+            50%      { opacity: 0.3; }
         }
 
         .progress-bar {
@@ -39,13 +36,30 @@
             transition: width 1s linear, background-color 0.3s;
         }
 
-        button {
-            transition: all 0.2s;
-        }
+        button { transition: all 0.2s; }
+        button:active { transform: scale(0.95); }
 
-        button:active {
-            transform: scale(0.95);
+        #ios-toast {
+            position: fixed;
+            bottom: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255,255,255,0.12);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 14px;
+            padding: 14px 20px;
+            font-size: 0.85rem;
+            text-align: center;
+            line-height: 1.6;
+            width: 88%;
+            max-width: 360px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+            z-index: 50;
         }
+        #ios-toast.show { opacity: 1; }
     </style>
 </head>
 <body class="flex flex-col items-center justify-center h-screen relative">
@@ -55,45 +69,58 @@
         <div id="progress" class="progress-bar bg-emerald-500 w-full"></div>
     </div>
 
-    <!-- 計時顯示區 -->
-    <div id="display-container" class="flex flex-col items-center">
+    <!-- 計時顯示 -->
+    <div class="flex flex-col items-center mb-4">
         <div id="timer" class="timer-display status-green">00:00</div>
-        <div id="overtime-label" class="text-2xl font-bold text-red-500 opacity-0 uppercase tracking-widest">Time Over</div>
+        <div id="overtime-label" class="text-xl font-bold text-red-500 opacity-0 uppercase tracking-widest">Time Over</div>
     </div>
 
     <!-- 控制面板 -->
-    <div id="controls" class="mt-8 space-y-6 w-full max-w-2xl px-6">
-        
-        <!-- 預設按鈕 -->
-        <div class="grid grid-cols-4 gap-4">
-            <button onclick="setTime(300)" class="bg-gray-800 hover:bg-gray-700 py-3 rounded-lg text-lg border border-gray-600">5 min</button>
-            <button onclick="setTime(600)" class="bg-gray-800 hover:bg-gray-700 py-3 rounded-lg text-lg border border-gray-600">10 min</button>
-            <button onclick="setTime(900)" class="bg-gray-800 hover:bg-gray-700 py-3 rounded-lg text-lg border border-gray-600">15 min</button>
-            <button onclick="setTime(1200)" class="bg-gray-800 hover:bg-gray-700 py-3 rounded-lg text-lg border border-gray-600">20 min</button>
+    <div id="controls" class="w-full max-w-lg px-4 space-y-3">
+
+        <!-- 預設時間 -->
+        <div class="grid grid-cols-4 gap-2">
+            <button onclick="setTime(300)"  class="bg-gray-800 hover:bg-gray-700 py-3 rounded-lg text-base border border-gray-600">5 min</button>
+            <button onclick="setTime(600)"  class="bg-gray-800 hover:bg-gray-700 py-3 rounded-lg text-base border border-gray-600">10 min</button>
+            <button onclick="setTime(900)"  class="bg-gray-800 hover:bg-gray-700 py-3 rounded-lg text-base border border-gray-600">15 min</button>
+            <button onclick="setTime(1200)" class="bg-gray-800 hover:bg-gray-700 py-3 rounded-lg text-base border border-gray-600">20 min</button>
         </div>
 
-        <!-- 自定義輸入與主要操作 -->
-        <div class="flex items-center space-x-4 bg-gray-900 p-4 rounded-xl border border-gray-700">
-            <div class="flex-1 flex items-center space-x-2">
-                <input type="number" id="input-m" placeholder="分" class="w-20 bg-black border border-gray-600 rounded px-2 py-1 text-center text-xl focus:outline-none focus:border-emerald-500">
-                <span>:</span>
-                <input type="number" id="input-s" placeholder="秒" class="w-20 bg-black border border-gray-600 rounded px-2 py-1 text-center text-xl focus:outline-none focus:border-emerald-500">
-                <button onclick="setCustomTime()" class="text-sm text-gray-400 hover:text-white px-2 italic underline">設定</button>
-            </div>
+        <!-- 自訂輸入 -->
+        <div class="flex items-center gap-2 bg-gray-900 px-4 py-3 rounded-xl border border-gray-700">
+            <input type="number" id="input-m" placeholder="分" min="0"
+                   class="w-16 bg-black border border-gray-600 rounded px-2 py-1 text-center text-lg focus:outline-none focus:border-emerald-500">
+            <span class="text-gray-400">:</span>
+            <input type="number" id="input-s" placeholder="秒" min="0" max="59"
+                   class="w-16 bg-black border border-gray-600 rounded px-2 py-1 text-center text-lg focus:outline-none focus:border-emerald-500">
+            <button onclick="setCustomTime()" class="text-sm text-gray-400 hover:text-white px-2 italic underline whitespace-nowrap">設定</button>
+        </div>
 
-            <div class="flex space-x-3">
-                <button id="btn-start" onclick="toggleTimer()" class="bg-emerald-600 hover:bg-emerald-500 px-8 py-2 rounded-lg font-bold">START</button>
-                <button onclick="resetTimer()" class="bg-gray-700 hover:bg-gray-600 px-6 py-2 rounded-lg">RESET</button>
-                <button onclick="toggleFullscreen()" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
-                        <path d="M1.5 1a.5.5 0 0 0-.5.5v4a.5.5 0 0 1-1 0v-4A1.5 1.5 0 0 1 1.5 0h4a.5.5 0 0 1 0 1h-4zM10 .5a.5.5 0 0 1 .5-.5h4A1.5 1.5 0 0 1 16 1.5v4a.5.5 0 0 1-1 0v-4a.5.5 0 0 0-.5-.5h-4a.5.5 0 0 1-.5-.5zM.5 10a.5.5 0 0 1 .5.5v4a.5.5 0 0 0 .5.5h4a.5.5 0 0 1 0 1h-4A1.5 1.5 0 0 1 0 14.5v-4a.5.5 0 0 1 .5-.5zm15 0a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-1.5 1.5h-4a.5.5 0 0 1 0-1h4a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 1 .5-.5z"/>
-                    </svg>
-                </button>
-            </div>
+        <!-- 主操作 -->
+        <div class="flex gap-2">
+            <button id="btn-start" onclick="toggleTimer()"
+                    class="flex-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-xl font-bold text-lg">START</button>
+            <button onclick="resetTimer()"
+                    class="flex-1 bg-gray-700 hover:bg-gray-600 py-3 rounded-xl font-bold text-lg">RESET</button>
+            <button onclick="toggleFullscreen()" title="全螢幕"
+                    class="bg-gray-700 hover:bg-gray-600 px-4 py-3 rounded-xl">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M1.5 1a.5.5 0 0 0-.5.5v4a.5.5 0 0 1-1 0v-4A1.5 1.5 0 0 1 1.5 0h4a.5.5 0 0 1 0 1h-4zM10 .5a.5.5 0 0 1 .5-.5h4A1.5 1.5 0 0 1 16 1.5v4a.5.5 0 0 1-1 0v-4a.5.5 0 0 0-.5-.5h-4a.5.5 0 0 1-.5-.5zM.5 10a.5.5 0 0 1 .5.5v4a.5.5 0 0 0 .5.5h4a.5.5 0 0 1 0 1h-4A1.5 1.5 0 0 1 0 14.5v-4a.5.5 0 0 1 .5-.5zm15 0a.5.5 0 0 1 .5.5v4a1.5 1.5 0 0 1-1.5 1.5h-4a.5.5 0 0 1 0-1h4a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 1 .5-.5z"/>
+                </svg>
+            </button>
         </div>
     </div>
 
-    <p class="fixed bottom-4 text-gray-600 text-xs uppercase tracking-widest">Space to Start/Pause | R to Reset | F to Fullscreen</p>
+    <p class="fixed bottom-4 text-gray-600 text-xs uppercase tracking-widest text-center">
+        Space to Start/Pause &nbsp;|&nbsp; R to Reset &nbsp;|&nbsp; F to Fullscreen
+    </p>
+
+    <!-- iOS 全螢幕提示 -->
+    <div id="ios-toast">
+        📱 iPhone 不支援網頁全螢幕<br>
+        點瀏覽器下方 <strong>分享 → 加入主畫面</strong><br>
+        從主畫面開啟即可全螢幕 ✅
+    </div>
 
     <script>
         let totalSeconds = 0;
@@ -101,41 +128,38 @@
         let timerInterval = null;
         let isRunning = false;
 
-        const display = document.getElementById('timer');
-        const progressBar = document.getElementById('progress');
-        const startBtn = document.getElementById('btn-start');
+        const display       = document.getElementById('timer');
+        const progressBar   = document.getElementById('progress');
+        const startBtn      = document.getElementById('btn-start');
         const overtimeLabel = document.getElementById('overtime-label');
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
 
         function updateDisplay() {
-            let absSeconds = Math.abs(totalSeconds);
-            let mins = Math.floor(absSeconds / 60);
-            let secs = absSeconds % 60;
-            
-            let displayStr = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-            display.innerText = (totalSeconds < 0 ? "-" : "") + displayStr;
+            let abs  = Math.abs(totalSeconds);
+            let mins = Math.floor(abs / 60);
+            let secs = abs % 60;
+            display.innerText = (totalSeconds < 0 ? "-" : "") +
+                `${String(mins).padStart(2,'0')}:${String(secs).padStart(2,'0')}`;
 
-            // 處理顏色與警示
             if (totalSeconds < 0) {
                 display.className = "timer-display status-red overtime";
                 overtimeLabel.style.opacity = "1";
                 progressBar.style.width = "100%";
-                progressBar.classList.replace('bg-emerald-500', 'bg-red-600');
+                progressBar.style.backgroundColor = "#dc2626";
             } else {
-                let ratio = totalSeconds / initialSeconds;
+                let ratio = initialSeconds > 0 ? totalSeconds / initialSeconds : 0;
                 overtimeLabel.style.opacity = "0";
                 display.classList.remove('overtime');
-                
                 if (ratio <= 0.1) {
                     display.className = "timer-display status-red";
-                    progressBar.className = "progress-bar bg-red-500";
+                    progressBar.style.backgroundColor = "#ef4444";
                 } else if (ratio <= 0.2) {
                     display.className = "timer-display status-yellow";
-                    progressBar.className = "progress-bar bg-amber-500";
+                    progressBar.style.backgroundColor = "#f59e0b";
                 } else {
                     display.className = "timer-display status-green";
-                    progressBar.className = "progress-bar bg-emerald-500";
+                    progressBar.style.backgroundColor = "#10b981";
                 }
-                
                 progressBar.style.width = (ratio * 100) + "%";
             }
         }
@@ -144,15 +168,14 @@
             clearInterval(timerInterval);
             isRunning = false;
             startBtn.innerText = "START";
-            totalSeconds = s;
-            initialSeconds = s;
+            totalSeconds = initialSeconds = s;
             updateDisplay();
         }
 
         function setCustomTime() {
             let m = parseInt(document.getElementById('input-m').value) || 0;
             let s = parseInt(document.getElementById('input-s').value) || 0;
-            setTime((m * 60) + s);
+            setTime(m * 60 + s);
         }
 
         function toggleTimer() {
@@ -161,10 +184,7 @@
                 startBtn.innerText = "RESUME";
             } else {
                 if (totalSeconds === 0 && initialSeconds === 0) return;
-                timerInterval = setInterval(() => {
-                    totalSeconds--;
-                    updateDisplay();
-                }, 1000);
+                timerInterval = setInterval(() => { totalSeconds--; updateDisplay(); }, 1000);
                 startBtn.innerText = "PAUSE";
             }
             isRunning = !isRunning;
@@ -179,18 +199,21 @@
         }
 
         function toggleFullscreen() {
+            if (isIOS) {
+                const toast = document.getElementById('ios-toast');
+                toast.classList.add('show');
+                setTimeout(() => toast.classList.remove('show'), 4000);
+                return;
+            }
             if (!document.fullscreenElement) {
                 document.documentElement.requestFullscreen();
                 document.getElementById('controls').classList.add('opacity-0', 'hover:opacity-100', 'transition-opacity');
             } else {
-                if (document.exitFullscreen) {
-                    document.exitFullscreen();
-                    document.getElementById('controls').classList.remove('opacity-0');
-                }
+                document.exitFullscreen();
+                document.getElementById('controls').classList.remove('opacity-0');
             }
         }
 
-        // 鍵盤快捷鍵
         document.addEventListener('keydown', (e) => {
             if (e.target.tagName === 'INPUT') return;
             if (e.code === 'Space') { e.preventDefault(); toggleTimer(); }
