@@ -39,6 +39,16 @@
         button { transition: all 0.2s; }
         button:active { transform: scale(0.95); }
 
+        /* 控制面板淡入淡出 */
+        #controls, #bottom-hint {
+            transition: opacity 0.4s ease, visibility 0.4s ease;
+        }
+        #controls.hidden-ui, #bottom-hint.hidden-ui {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
         #ios-toast {
             position: fixed;
             bottom: 60px;
@@ -111,7 +121,7 @@
         </div>
     </div>
 
-    <p class="fixed bottom-4 text-gray-600 text-xs uppercase tracking-widest text-center">
+    <p id="bottom-hint" class="fixed bottom-4 text-gray-600 text-xs uppercase tracking-widest text-center">
         Space to Start/Pause &nbsp;|&nbsp; R to Reset &nbsp;|&nbsp; F to Fullscreen
     </p>
 
@@ -132,7 +142,42 @@
         const progressBar   = document.getElementById('progress');
         const startBtn      = document.getElementById('btn-start');
         const overtimeLabel = document.getElementById('overtime-label');
+        const controls      = document.getElementById('controls');
+        const bottomHint    = document.getElementById('bottom-hint');
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+        let autoHideTimer = null;
+
+        function hideUI() {
+            controls.classList.add('hidden-ui');
+            bottomHint.classList.add('hidden-ui');
+        }
+
+        function showUITemporarily() {
+            controls.classList.remove('hidden-ui');
+            bottomHint.classList.remove('hidden-ui');
+            clearTimeout(autoHideTimer);
+            // 若計時器正在跑，3 秒後自動再隱藏
+            if (isRunning) {
+                autoHideTimer = setTimeout(hideUI, 3000);
+            }
+        }
+
+        // 點擊 / 觸控螢幕時顯示控制面板
+        document.addEventListener('click', (e) => {
+            if (!isRunning) return;
+            // 若面板已隱藏（點擊空白處）→ 顯示
+            // 若面板可見（點在按鈕上）→ 重設計時器，不干涉
+            if (controls.classList.contains('hidden-ui')) {
+                showUITemporarily();
+            } else {
+                // 點在按鈕以外的地方 → 重設自動隱藏計時
+                if (e.target === document.body || e.target.tagName === 'DIV') {
+                    clearTimeout(autoHideTimer);
+                    autoHideTimer = setTimeout(hideUI, 3000);
+                }
+            }
+        });
 
         function updateDisplay() {
             let abs  = Math.abs(totalSeconds);
@@ -180,22 +225,29 @@
 
         function toggleTimer() {
             if (isRunning) {
+                // 暫停 → 顯示按鈕
                 clearInterval(timerInterval);
+                clearTimeout(autoHideTimer);
                 startBtn.innerText = "RESUME";
+                showUITemporarily();
             } else {
                 if (totalSeconds === 0 && initialSeconds === 0) return;
                 timerInterval = setInterval(() => { totalSeconds--; updateDisplay(); }, 1000);
                 startBtn.innerText = "PAUSE";
+                // 開始計時 → 1 秒後隱藏按鈕
+                autoHideTimer = setTimeout(hideUI, 1000);
             }
             isRunning = !isRunning;
         }
 
         function resetTimer() {
             clearInterval(timerInterval);
+            clearTimeout(autoHideTimer);
             isRunning = false;
             totalSeconds = initialSeconds;
             startBtn.innerText = "START";
             updateDisplay();
+            showUITemporarily(); // reset 後顯示按鈕
         }
 
         function toggleFullscreen() {
