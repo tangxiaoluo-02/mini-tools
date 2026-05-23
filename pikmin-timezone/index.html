@@ -347,9 +347,14 @@ const MODES={
 };
 const DEFAULT_FAVS=["湧泉","盧卡小丘","破繭而出","翡冷翠正門","摩納哥","一起出遊去","聖塔露琪亞"];
 let mode = localStorage.getItem("pikmin_mode")||"normal";
-let favs = JSON.parse(localStorage.getItem("pikmin_favs")||"null");
-if(!favs){favs=[...DEFAULT_FAVS];}
+let favs = JSON.parse(localStorage.getItem("pikmin_favs")||"[]");
 let recs = JSON.parse(localStorage.getItem("pikmin_recs")||"[]");
+// 只在「第一次升版」時，把預設花名補入現有清單，不刪除任何已有資料
+if(!localStorage.getItem("pikmin_defaults_v1")){
+  DEFAULT_FAVS.forEach(n=>{if(!favs.includes(n))favs.push(n);});
+  saveFavs();
+  localStorage.setItem("pikmin_defaults_v1","1");
+}
 function saveFavs(){localStorage.setItem("pikmin_favs",JSON.stringify(favs));}
 function saveRecs(){localStorage.setItem("pikmin_recs",JSON.stringify(recs));}
 
