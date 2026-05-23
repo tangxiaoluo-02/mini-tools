@@ -192,12 +192,14 @@ header p{font-size:0.78rem;color:#81c784;margin-top:4px;}
       <input class="inp" type="text" id="plant-name" placeholder="花朵名稱（如：白色勿忘草）" style="flex:1;">
       <button class="btn-star" onclick="addFav('plant-name')" title="加入常用花名">⭐</button>
     </div>
-    <div class="row" style="margin-bottom:4px;">
+    <div class="row" style="margin-bottom:4px;flex-wrap:wrap;gap:6px;">
       <span class="time-lbl">距葉子階段還有</span>
       <input class="inp inp-num" type="number" id="plant-h" placeholder="0" min="0" max="23">
-      <span class="time-lbl">小時</span>
+      <span class="time-lbl">時</span>
       <input class="inp inp-num" type="number" id="plant-m" placeholder="0" min="0" max="59">
-      <span class="time-lbl">分鐘</span>
+      <span class="time-lbl">分</span>
+      <input class="inp inp-num" type="number" id="plant-s" placeholder="0" min="0" max="59">
+      <span class="time-lbl">秒</span>
     </div>
     <button class="btn-primary" onclick="addPlant()">新增種花紀錄</button>
   </div>
@@ -210,12 +212,14 @@ header p{font-size:0.78rem;color:#81c784;margin-top:4px;}
       <input class="inp" type="text" id="fruit-name" placeholder="花朵名稱（如：白色勿忘草）" style="flex:1;">
       <button class="btn-star" onclick="addFav('fruit-name')" title="加入常用花名">⭐</button>
     </div>
-    <div class="row" style="margin-bottom:6px;">
+    <div class="row" style="margin-bottom:6px;flex-wrap:wrap;gap:6px;">
       <span class="time-lbl">目前開花剩餘</span>
       <input class="inp inp-num" type="number" id="fruit-h" placeholder="0" min="0" max="23">
-      <span class="time-lbl">小時</span>
+      <span class="time-lbl">時</span>
       <input class="inp inp-num" type="number" id="fruit-m" placeholder="0" min="0" max="59">
-      <span class="time-lbl">分鐘</span>
+      <span class="time-lbl">分</span>
+      <input class="inp inp-num" type="number" id="fruit-s" placeholder="0" min="0" max="59">
+      <span class="time-lbl">秒</span>
     </div>
     <div class="hint-box" id="fruit-hint"></div>
     <button class="btn-primary" onclick="addFruit()">新增水果截止紀錄</button>
@@ -341,8 +345,10 @@ const MODES={
   cday:  {label:"社群日",totalH:3},
   cweek: {label:"社群週",totalH:6}
 };
+const DEFAULT_FAVS=["湧泉","盧卡小丘","破繭而出","翡冷翠正門","摩納哥","一起出遊去","聖塔露琪亞"];
 let mode = localStorage.getItem("pikmin_mode")||"normal";
-let favs = JSON.parse(localStorage.getItem("pikmin_favs")||"[]");
+let favs = JSON.parse(localStorage.getItem("pikmin_favs")||"null");
+if(!favs){favs=[...DEFAULT_FAVS];}
 let recs = JSON.parse(localStorage.getItem("pikmin_recs")||"[]");
 function saveFavs(){localStorage.setItem("pikmin_favs",JSON.stringify(favs));}
 function saveRecs(){localStorage.setItem("pikmin_recs",JSON.stringify(recs));}
@@ -390,28 +396,28 @@ function renderChips(){
 function addPlant(){
   const name=el("plant-name").value.trim();
   if(!name){alert("請輸入花朵名稱");return;}
-  const h=parseInt(el("plant-h").value)||0, m=parseInt(el("plant-m").value)||0;
-  if(h===0&&m===0){alert("請輸入距葉子階段的倒數時間");return;}
-  const plantTime=new Date(Date.now()+(h*60+m)*60000);
+  const h=parseInt(el("plant-h").value)||0, m=parseInt(el("plant-m").value)||0, s=parseInt(el("plant-s").value)||0;
+  if(h===0&&m===0&&s===0){alert("請輸入距葉子階段的倒數時間");return;}
+  const plantTime=new Date(Date.now()+(h*3600+m*60+s)*1000);
   recs.push({id:Date.now(),type:"plant",name,time:plantTime.toISOString()});
   saveRecs(); renderRecs();
-  el("plant-name").value=""; el("plant-h").value=""; el("plant-m").value="";
+  el("plant-name").value=""; el("plant-h").value=""; el("plant-m").value=""; el("plant-s").value="";
 }
 
 // 新增取水果
 function addFruit(){
   const name=el("fruit-name").value.trim();
   if(!name){alert("請輸入花朵名稱");return;}
-  const h=parseInt(el("fruit-h").value)||0, m=parseInt(el("fruit-m").value)||0;
-  if(h===0&&m===0){alert("請輸入目前開花剩餘時間");return;}
-  const remainMins=h*60+m;
-  const totalMins=MODES[mode].totalH*60;
-  const minsLeft=remainMins-(totalMins-60);
-  if(minsLeft<=0){alert("⚠️ 已超過水果時間！\n（剩餘 "+h+"h"+m+"m，但需大於 "+(MODES[mode].totalH-1)+"h00m）");return;}
-  const deadline=new Date(Date.now()+minsLeft*60000);
+  const h=parseInt(el("fruit-h").value)||0, m=parseInt(el("fruit-m").value)||0, s=parseInt(el("fruit-s").value)||0;
+  if(h===0&&m===0&&s===0){alert("請輸入目前開花剩餘時間");return;}
+  const remainSecs=h*3600+m*60+s;
+  const totalSecs=MODES[mode].totalH*3600;
+  const secsLeft=remainSecs-(totalSecs-3600);
+  if(secsLeft<=0){alert("⚠️ 已超過水果時間！\n（需剩餘大於 "+(MODES[mode].totalH-1)+" 小時整）");return;}
+  const deadline=new Date(Date.now()+secsLeft*1000);
   recs.push({id:Date.now(),type:"fruit",name,time:deadline.toISOString(),mode});
   saveRecs(); renderRecs();
-  el("fruit-name").value=""; el("fruit-h").value=""; el("fruit-m").value="";
+  el("fruit-name").value=""; el("fruit-h").value=""; el("fruit-m").value=""; el("fruit-s").value="";
 }
 
 // 渲染紀錄
