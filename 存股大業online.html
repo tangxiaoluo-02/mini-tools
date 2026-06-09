@@ -649,7 +649,19 @@
                     const color = diff >= 0 ? 'text-rose-500' : 'text-emerald-500';
                     diffHtml = `<span class="text-[10px] ${color} font-medium mr-2">(vs去年 ${sign}${diff.toLocaleString()})</span>`;
                 }
-                section.innerHTML = `<div class="p-4 flex justify-between items-center cursor-pointer select-none ${isExpanded ? 'bg-slate-50' : 'hover:bg-slate-50'}" onclick="toggleMonth(${m})"><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-full flex items-center justify-center font-bold ${isFuture ? 'text-slate-400 bg-slate-50' : 'text-slate-600 bg-emerald-50'}">${m}</div><div class="flex flex-col"><div class="flex flex-col items-start"><span class="font-bold ${isFuture ? 'text-slate-400' : 'text-slate-700'}">配息</span><span class="font-bold ${isFuture ? 'text-slate-400' : 'text-slate-700'}">總額</span></div></div></div><div class="flex items-center gap-2">${diffHtml}<span class="font-mono font-bold ${isFuture ? 'text-slate-400' : 'text-emerald-600'} text-lg">NT$ ${monthTotal.toLocaleString()}</span><i data-lucide="${isExpanded ? 'chevron-up' : 'chevron-down'}" class="w-4 h-4 text-slate-400"></i></div></div>`;
+                // 計算本月應除息（快捷鍵中的）股票共幾檔，已輸入幾檔
+                const visibleForBadge = stockTypes.filter(s => !stockConfigs[s.code]?.hidden);
+                const likelyForBadge = visibleForBadge.filter(s => stockMonthMap[s.code] && stockMonthMap[s.code].has(m));
+                const enteredCount = likelyForBadge.filter(s => transactions.some(t => t.code === s.code && t.year === currentYear && t.month === m)).length;
+                const totalLikely = likelyForBadge.length;
+                let progressBadgeHtml = '';
+                if (!isFuture && totalLikely > 0) {
+                    const allDone = enteredCount === totalLikely;
+                    const badgeColor = allDone ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700';
+                    const badgeIcon = allDone ? '✓' : '○';
+                    progressBadgeHtml = `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${badgeColor}">${badgeIcon} ${enteredCount}/${totalLikely}</span>`;
+                }
+                section.innerHTML = `<div class="p-4 flex justify-between items-center cursor-pointer select-none ${isExpanded ? 'bg-slate-50' : 'hover:bg-slate-50'}" onclick="toggleMonth(${m})"><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-full flex items-center justify-center font-bold ${isFuture ? 'text-slate-400 bg-slate-50' : 'text-slate-600 bg-emerald-50'}">${m}</div><div class="flex flex-col"><div class="flex flex-col items-start"><span class="font-bold ${isFuture ? 'text-slate-400' : 'text-slate-700'}">配息</span><span class="font-bold ${isFuture ? 'text-slate-400' : 'text-slate-700'}">總額</span></div></div></div><div class="flex items-center gap-2">${progressBadgeHtml}${diffHtml}<span class="font-mono font-bold ${isFuture ? 'text-slate-400' : 'text-emerald-600'} text-lg">NT$ ${monthTotal.toLocaleString()}</span><i data-lucide="${isExpanded ? 'chevron-up' : 'chevron-down'}" class="w-4 h-4 text-slate-400"></i></div></div>`;
                 if (isExpanded) {
                     const content = document.createElement('div');
                     content.className = "p-4 border-t border-slate-100 bg-slate-50/50 slide-down";
@@ -663,10 +675,21 @@
                     if (stocksToShow.length === 0 && !isShowingAll) chipsContainer.innerHTML = `<span class="text-xs text-slate-400 italic">本月歷史無配息紀錄</span>`;
                     stocksToShow.forEach(stock => {
                         const isLikely = likelyStocks.includes(stock);
+                        const alreadyEntered = transactions.some(t => t.code === stock.code && t.year === currentYear && t.month === m);
                         const btn = document.createElement('button');
-                        btn.className = `px-3 py-1.5 border rounded-full text-xs font-medium shadow-sm active:scale-95 transition chip-enter ${isLikely ? 'bg-white border-slate-200 text-slate-700 hover:border-emerald-500 hover:text-emerald-600' : 'bg-slate-100 border-transparent text-slate-500 hover:bg-white hover:border-slate-300'}`;
-                        btn.textContent = `${stock.code} ${stock.name}`;
-                        btn.onclick = () => addTransaction(stock.code, stock.name, m);
+                        if (alreadyEntered) {
+                            btn.className = `px-3 py-1.5 border rounded-full text-xs font-medium shadow-sm active:scale-95 transition chip-enter bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100`;
+                            btn.innerHTML = `<span style="margin-right:3px">✓</span>${stock.code} ${stock.name}`;
+                            btn.onclick = () => {
+                                if (confirm(`${stock.code} ${stock.name} 本月已輸入過一筆。\n確定要再新增一筆嗎？`)) {
+                                    addTransaction(stock.code, stock.name, m);
+                                }
+                            };
+                        } else {
+                            btn.className = `px-3 py-1.5 border rounded-full text-xs font-medium shadow-sm active:scale-95 transition chip-enter ${isLikely ? 'bg-white border-slate-200 text-slate-700 hover:border-emerald-500 hover:text-emerald-600' : 'bg-slate-100 border-transparent text-slate-500 hover:bg-white hover:border-slate-300'}`;
+                            btn.textContent = `${stock.code} ${stock.name}`;
+                            btn.onclick = () => addTransaction(stock.code, stock.name, m);
+                        }
                         chipsContainer.appendChild(btn);
                     });
                     if (otherStocks.length > 0) {
