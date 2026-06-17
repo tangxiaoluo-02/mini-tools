@@ -209,11 +209,46 @@
     }
     .btn-del-u:hover { border-color: var(--red); color: var(--red); }
 
+    .btn-edit-u {
+      background: none; border: 1px solid var(--border); color: var(--primary);
+      padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: .78rem;
+      font-weight: 600; white-space: nowrap; transition: background .1s;
+    }
+    .btn-edit-u:hover { background: var(--primary-l); }
+
+    .btn-done-u {
+      background: var(--primary); color: #fff; border: none;
+      padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: .78rem;
+      font-weight: 700; white-space: nowrap; transition: background .1s;
+    }
+    .btn-done-u:hover { background: var(--primary-h); }
+
     .unit-name-edit {
       font-weight: 700; font-size: .92rem; flex: 1; min-width: 80px;
       padding: 3px 8px; border: 1.5px solid var(--primary); border-radius: 6px;
       background: #fff; color: var(--text); outline: none;
     }
+
+    /* ── 單元編輯面板 ── */
+    .unit-edit-panel {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+      padding: 10px 14px; background: #fffbeb;
+      border-top: 1px dashed #fbbf24;
+    }
+    .ue-lbl { font-size: .78rem; color: var(--muted); white-space: nowrap; }
+    .ue-mini {
+      width: 50px; padding: 6px 4px; text-align: center;
+      border: 1.5px solid var(--border); border-radius: 7px;
+      font-size: .9rem; font-family: 'Courier New', monospace;
+      background: #fff; color: var(--text);
+    }
+    .ue-mini:focus { outline: none; border-color: var(--primary); }
+    .btn-clear-lim {
+      padding: 4px 10px; background: none; border: 1px solid #e2e8f0;
+      color: var(--muted); border-radius: 6px; font-size: .76rem; cursor: pointer;
+      transition: border-color .1s, color .1s;
+    }
+    .btn-clear-lim:hover { border-color: var(--red); color: var(--red); }
 
     /* ── 單元詳情 ── */
     .unit-detail { border-top: 1px solid var(--border-s); padding: 14px; background: var(--inner); }
@@ -371,7 +406,7 @@ let editingCur = -1;     // curSegs 中正在編輯的 index
 let units = [];          // { name, limMs, note, segs:[{ms}] }
 let openUnit = -1;       // 展開的單元 index
 let editingUSeg = null;  // { ui, si }
-let editingUnitName = -1; // 正在改名的單元 index
+let editingUnit = -1; // 正在編輯的單元 index（改名／排序／上限）
 
 const STORAGE_KEY = 'timecalc_units_v1';
 
@@ -571,8 +606,8 @@ function saveUnit(){
 /* ── 單元操作 ── */
 function delUnit(i){
   units.splice(i,1);
-  if(openUnit===i) openUnit=-1;
-  else if(openUnit>i) openUnit--;
+  if(openUnit===i) openUnit=-1; else if(openUnit>i) openUnit--;
+  if(editingUnit===i) editingUnit=-1; else if(editingUnit>i) editingUnit--;
   editingUSeg=null;
   saveData(); renderUnits();
 }
@@ -622,27 +657,42 @@ function addSegToUnit(ui){
 
 function saveNote(ui,el){ units[ui].note=el.innerText.trim(); saveData(); }
 
-/* ── 單元改名 ── */
-function startEditUnitName(ui){
-  editingUnitName=ui;
+/* ── 單元編輯模式 ── */
+function startEditUnit(ui){
+  editingUnit=ui;
   renderUnits();
-  setTimeout(()=>{ const el=$(`uname-inp-${ui}`); if(el){el.focus();el.select();} },0);
+  setTimeout(()=>{ const el=$(`ue-name-${ui}`); if(el){el.focus();el.select();} },0);
 }
-function confirmUnitName(ui){
-  const el=$(`uname-inp-${ui}`);
-  if(el){ const v=el.value.trim(); if(v) units[ui].name=v; }
-  editingUnitName=-1; saveData(); renderUnits();
-}
-function cancelUnitName(){ editingUnitName=-1; renderUnits(); }
 
-/* ── 單元排序 ── */
+function flushEditUnit(ui){
+  // 把目前輸入框的值存回 units[ui]（moveUnit 前呼叫，避免移動後資料消失）
+  const nameEl=$(`ue-name-${ui}`);
+  if(nameEl){ const v=nameEl.value.trim(); if(v) units[ui].name=v; }
+  const lh=parseInt($(`ue-lh-${ui}`)?.value)||0;
+  const lm=parseInt($(`ue-lm-${ui}`)?.value)||0;
+  const ls=parseInt($(`ue-ls-${ui}`)?.value)||0;
+  units[ui].limMs=toMs(lh,lm,ls,0);
+}
+
+function confirmEditUnit(ui){
+  flushEditUnit(ui);
+  editingUnit=-1; saveData(); renderUnits();
+}
+
+/* ── 單元排序（只在編輯模式下可用）── */
 function moveUnit(i,dir){
+  if(editingUnit===i) flushEditUnit(i); // 先存目前輸入
   const j=i+dir;
   if(j<0||j>=units.length) return;
   [units[i],units[j]]=[units[j],units[i]];
   if(openUnit===i) openUnit=j; else if(openUnit===j) openUnit=i;
-  if(editingUnitName===i) editingUnitName=j; else if(editingUnitName===j) editingUnitName=i;
+  if(editingUnit===i) editingUnit=j; else if(editingUnit===j) editingUnit=i;
   saveData(); renderUnits();
+  setTimeout(()=>{ const el=$(`ue-name-${editingUnit}`); if(el)el.focus(); },0);
+}
+
+function clearUnitLimit(ui){
+  ['ue-lh','ue-lm','ue-ls'].forEach(p=>{ const el=$(`${p}-${ui}`); if(el) el.value=''; });
 }
 
 /* ── 緊湊時間格式（只顯示有意義的單位）── */
@@ -696,28 +746,44 @@ function renderUnits(){
         : `<span class="badge ok">剩餘 ${fmtShort(diff)}</span>`;
     }
     const limNote=hasLim?`<span style="font-size:.72rem;color:var(--muted);">上限 ${fmtMs(u.limMs)}</span>`:'';
-    const isEditingName=editingUnitName===ui;
+    const isEditing=editingUnit===ui;
+    const {h:lh,m:lm,s:ls}=splitMs(u.limMs);
 
-    const nameArea = isEditingName
-      ? `<input id="uname-inp-${ui}" class="unit-name-edit" value="${esc(u.name)}" maxlength="50"
-           onclick="event.stopPropagation()"
-           onkeydown="if(event.key==='Enter')confirmUnitName(${ui});if(event.key==='Escape')cancelUnitName()">
-         <button class="bi" onclick="event.stopPropagation();confirmUnitName(${ui})" title="確認">✓</button>
-         <button class="bi" onclick="event.stopPropagation();cancelUnitName()" title="取消">✗</button>`
-      : `<span class="unit-name">${esc(u.name)}</span>
-         <button class="bi" onclick="event.stopPropagation();startEditUnitName(${ui})" title="改名">✏️</button>`;
+    const headerHtml = isEditing
+      ? `<div class="unit-header">
+           <span class="expand-icon ${isOpen?'open':''}">▶</span>
+           <input id="ue-name-${ui}" class="unit-name-edit" value="${esc(u.name)}" maxlength="50"
+                  onclick="event.stopPropagation()"
+                  onkeydown="if(event.key==='Enter')confirmEditUnit(${ui})">
+           <button class="bi" onclick="event.stopPropagation();moveUnit(${ui},-1)" ${ui===0?'disabled':''} title="往上移">↑</button>
+           <button class="bi" onclick="event.stopPropagation();moveUnit(${ui}, 1)" ${ui===units.length-1?'disabled':''} title="往下移">↓</button>
+           <span class="unit-total">${fmtMs(total)}</span>
+           ${badge}
+           <button class="btn-done-u" onclick="event.stopPropagation();confirmEditUnit(${ui})">完成</button>
+           <button class="btn-del-u" onclick="event.stopPropagation();delUnit(${ui})">刪除</button>
+         </div>
+         <div class="unit-edit-panel">
+           <span class="ue-lbl">時間上限</span>
+           <input type="number" id="ue-lh-${ui}" class="ue-mini" min="0" value="${lh||''}" placeholder="時">
+           <span class="ue-lbl">時</span>
+           <input type="number" id="ue-lm-${ui}" class="ue-mini" min="0" max="59" value="${lm||''}" placeholder="分">
+           <span class="ue-lbl">分</span>
+           <input type="number" id="ue-ls-${ui}" class="ue-mini" min="0" max="59" value="${ls||''}" placeholder="秒">
+           <span class="ue-lbl">秒</span>
+           <button class="btn-clear-lim" onclick="clearUnitLimit(${ui})">清除上限</button>
+         </div>`
+      : `<div class="unit-header" onclick="toggleUnit(${ui})">
+           <span class="expand-icon ${isOpen?'open':''}">▶</span>
+           <span class="unit-name">${esc(u.name)}</span>
+           ${limNote}
+           <span class="unit-total">${fmtMs(total)}</span>
+           ${badge}
+           <button class="btn-edit-u" onclick="event.stopPropagation();startEditUnit(${ui})">編輯</button>
+           <button class="btn-del-u"  onclick="event.stopPropagation();delUnit(${ui})">刪除</button>
+         </div>`;
 
     html+=`<div class="unit-item">
-      <div class="unit-header" onclick="${isEditingName?'':` toggleUnit(${ui})`}">
-        <span class="expand-icon ${isOpen?'open':''}">▶</span>
-        ${nameArea}
-        ${limNote}
-        <span class="unit-total">${fmtMs(total)}</span>
-        ${badge}
-        <button class="bi" onclick="event.stopPropagation();moveUnit(${ui},-1)" ${ui===0?'disabled':''} title="往上移">↑</button>
-        <button class="bi" onclick="event.stopPropagation();moveUnit(${ui}, 1)" ${ui===units.length-1?'disabled':''} title="往下移">↓</button>
-        <button class="btn-del-u" onclick="event.stopPropagation();delUnit(${ui})">刪除</button>
-      </div>
+      ${headerHtml}
       ${isOpen?renderDetail(u,ui):''}
     </div>`;
   });
@@ -742,10 +808,12 @@ function renderUnits(){
     budgetEl.style.display='none';
   }
 
-  // 改名輸入框 listener
-  if(editingUnitName>=0){
-    const inp=$(`uname-inp-${editingUnitName}`);
-    if(inp) inp.addEventListener('blur',()=>{ setTimeout(()=>{ if(editingUnitName>=0) confirmUnitName(editingUnitName); },150); });
+  // 編輯模式：上限輸入框 Enter 鍵
+  if(editingUnit>=0){
+    ['ue-lh','ue-lm','ue-ls'].forEach(p=>{
+      const inp=$(`${p}-${editingUnit}`);
+      if(inp) inp.addEventListener('keydown',e=>{ if(e.key==='Enter') confirmEditUnit(editingUnit); });
+    });
   }
 
   // attach listeners after render
