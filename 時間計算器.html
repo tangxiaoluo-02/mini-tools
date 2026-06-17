@@ -250,6 +250,15 @@
     .grand-lbl { color: var(--muted); font-size: .9rem; }
     .grand-val { font-family: 'Courier New', monospace; font-size: 1.1rem; font-weight: 700; color: var(--green); }
 
+    .budget-row {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-top: 8px; padding: 8px 12px; border-radius: 8px; font-size: .88rem;
+    }
+    .budget-row.surplus { background: var(--green-bg); }
+    .budget-row.deficit { background: var(--red-bg); }
+    .budget-lbl { color: var(--muted); font-size: .82rem; }
+    .budget-val { font-family: 'Courier New', monospace; font-weight: 700; font-size: 1rem; }
+
     .btn-export {
       display: block; width: 100%; margin-top: 12px; padding: 9px;
       background: none; border: 1.5px dashed var(--border); color: var(--muted);
@@ -336,6 +345,7 @@
     <span class="grand-lbl">全部合計</span>
     <span class="grand-val" id="grand-time"></span>
   </div>
+  <div id="budget-row" style="display:none"></div>
   <button class="btn-export" id="export-btn" onclick="exportText()" style="display:none">📋 複製摘要到剪貼簿</button>
   <div class="backup-row">
     <button class="btn-backup btn-bk-export" onclick="exportJSON()">💾 匯出備份 (.json)</button>
@@ -627,12 +637,20 @@ function renderUnits(){
     grandRow.style.display='none'; expBtn.style.display='none'; return;
   }
 
-  let grand=0, html='';
+  let grand=0, limTotal=0, actualWithLim=0, limCount=0, html='';
   units.forEach((u,ui)=>{
     const total=Math.max(0,sumSegs(u.segs));
     grand+=total;
     const hasLim=u.limMs>0, over=hasLim&&total>u.limMs, isOpen=openUnit===ui;
-    const badge=hasLim?`<span class="badge ${over?'over':'ok'}">${over?'超時':'符合'}</span>`:'';
+    if(hasLim){ limTotal+=u.limMs; actualWithLim+=total; limCount++; }
+
+    let badge='';
+    if(hasLim){
+      const diff=Math.abs(u.limMs-total);
+      badge=over
+        ? `<span class="badge over">超時 ${fmtMs(diff)}</span>`
+        : `<span class="badge ok">剩餘 ${fmtMs(diff)}</span>`;
+    }
     const limNote=hasLim?`<span style="font-size:.72rem;color:var(--muted);">上限 ${fmtMs(u.limMs)}</span>`:'';
 
     html+=`<div class="unit-item">
@@ -651,6 +669,22 @@ function renderUnits(){
   list.innerHTML=html;
   $('grand-time').textContent=fmtMs(grand);
   grandRow.style.display='flex'; expBtn.style.display='block';
+
+  // 整體餘裕列
+  const budgetEl=$('budget-row');
+  if(limCount>0){
+    const net=limTotal-actualWithLim;
+    const surplus=net>=0;
+    budgetEl.className=`budget-row ${surplus?'surplus':'deficit'}`;
+    budgetEl.innerHTML=`
+      <span class="budget-lbl">整體餘裕（${limCount} 個有上限的單元）</span>
+      <span class="budget-val" style="color:var(${surplus?'--green':'--red'})">
+        ${surplus?'可挪用 +':'超支 -'}${fmtMs(Math.abs(net))}
+      </span>`;
+    budgetEl.style.display='flex';
+  } else {
+    budgetEl.style.display='none';
+  }
 
   // attach listeners after render
   if(openUnit>=0){
@@ -747,7 +781,8 @@ function exportText(){
     const total=Math.max(0,sumSegs(u.segs));
     grand+=total;
     const hasLim=u.limMs>0;
-    const status=hasLim?(total>u.limMs?'❌ 超時':'✅ 符合'):'';
+    const diff=hasLim?fmtMs(Math.abs(u.limMs-total)):'';
+    const status=hasLim?(total>u.limMs?`❌ 超時 ${diff}`:`✅ 剩餘 ${diff}`):'';
     const limStr=hasLim?`  (上限 ${fmtMs(u.limMs)})`:'';
     lines.push(`${i+1}. ${u.name}`);
     lines.push(`   時間：${fmtMs(total)}${limStr} ${status}`);
