@@ -906,26 +906,39 @@ function renderDetail(u, ui){
 function exportText(){
   flushNote();
   if(!units.length) return;
-  let lines=['【時間計算器 — 單元摘要】',''], grand=0;
-  units.forEach((u,i)=>{
+  let grand=0, limTotal=0, actualWithLim=0, limCount=0;
+  units.forEach(u=>{
     const total=Math.max(0,sumSegs(u.segs));
     grand+=total;
+    if(u.limMs>0){ limTotal+=u.limMs; actualWithLim+=total; limCount++; }
+  });
+  const lines=['【時間計算器 — 單元摘要】',''];
+  lines.push(`⏳ 全部合計：${fmtMs(grand)}`);
+  if(limCount>0){
+    const net=limTotal-actualWithLim;
+    lines.push(net>=0?`✅ 剩餘 ${fmtMs(net)}`:`❌ 超時 ${fmtMs(Math.abs(net))}`);
+  }
+  lines.push('','各單元細項','');
+  units.forEach(u=>{
+    const total=Math.max(0,sumSegs(u.segs));
     const hasLim=u.limMs>0;
     const diff=hasLim?fmtMs(Math.abs(u.limMs-total)):'';
     const status=hasLim?(total>u.limMs?`❌ 超時 ${diff}`:`✅ 剩餘 ${diff}`):'';
-    const limStr=hasLim?`  (上限 ${fmtMs(u.limMs)})`:'';
-    lines.push(`${i+1}. ${u.name}`);
-    lines.push(`   時間：${fmtMs(total)}${limStr} ${status}`);
+    const limStr=hasLim?` (上限 ${fmtMs(u.limMs)})`:'';
+    lines.push(`🙏 ${u.name}`);
+    lines.push(`⏳ 時間：${fmtMs(total)}${limStr}`);
+    if(status) lines.push(status);
     if(u.segs.length>1){
       const str=u.segs.map((s,j)=>(j===0&&s.ms>=0?'':s.ms<0?'－':'＋')+fmtMs(Math.abs(s.ms))).join(' ');
-      lines.push(`   段落：${str}`);
+      lines.push(`段落：${str}`);
     }
-    if(u.note) lines.push(`   備注：${u.note}`);
+    if(u.note) lines.push(`備注：${u.note}`);
+    lines.push('');
   });
-  lines.push('',`全部合計：${fmtMs(grand)}`);
-  navigator.clipboard.writeText(lines.join('\n'))
+  const text=lines.join('\n').trimEnd();
+  navigator.clipboard.writeText(text)
     .then(()=>warn('✅ 摘要已複製到剪貼簿！'))
-    .catch(()=>prompt('請手動複製：',lines.join('\n')));
+    .catch(()=>prompt('請手動複製：',text));
 }
 
 /* ── Enter 快捷鍵 ── */
