@@ -179,6 +179,26 @@
     .btn-save:active { transform: scale(.94); }
     .save-hint { font-size: .74rem; color: var(--muted); margin-top: 6px; }
 
+    /* ── 天數分頁 ── */
+    .day-tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+    .day-tab {
+      padding: 6px 14px; border-radius: 20px; border: 1.5px solid var(--border);
+      background: #fff; color: var(--muted); font-size: .82rem; font-weight: 600;
+      cursor: pointer; transition: background .1s, color .1s, border-color .1s;
+    }
+    .day-tab:hover { border-color: var(--primary); color: var(--primary); }
+    .day-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    /* ── 演出天數勾選 ── */
+    .day-pick { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .day-pick .ll { font-size: .8rem; color: var(--muted); white-space: nowrap; }
+    .day-chk {
+      display: flex; align-items: center; gap: 3px; font-size: .82rem; color: var(--text);
+      cursor: pointer; background: var(--inner); border: 1px solid var(--border-s);
+      border-radius: 6px; padding: 5px 9px; white-space: nowrap;
+    }
+    .day-chk input { accent-color: var(--primary); cursor: pointer; }
+
     /* ── 單元列表 ── */
     #unit-list { display: flex; flex-direction: column; gap: 10px; }
     .empty-hint { text-align: center; color: var(--muted); padding: 24px 0; font-size: .9rem; }
@@ -375,15 +395,23 @@
     </div>
     <button class="btn-save" onclick="saveUnit()">儲存單元 ✓</button>
   </div>
-  <div class="save-hint">💡 上限欄位可留空；儲存後段落自動清空</div>
+  <div class="day-pick" style="margin-top:10px">
+    <span class="ll">演出天數</span>
+    <label class="day-chk"><input type="checkbox" id="newday-1">第1天</label>
+    <label class="day-chk"><input type="checkbox" id="newday-2">第2天</label>
+    <label class="day-chk"><input type="checkbox" id="newday-3">第3天</label>
+    <label class="day-chk"><input type="checkbox" id="newday-4">第4天</label>
+  </div>
+  <div class="save-hint">💡 上限欄位可留空；演出天數可留空（代表每天都演）；儲存後段落自動清空</div>
 </div>
 
 <!-- ── 各單元紀錄 ── -->
 <div class="card">
   <div class="sec-label">各單元紀錄</div>
+  <div class="day-tabs" id="day-tabs"></div>
   <div id="unit-list"><div class="empty-hint">尚無儲存的單元</div></div>
   <div class="grand-row" id="grand-row" style="display:none">
-    <span class="grand-lbl">全部合計</span>
+    <span class="grand-lbl" id="grand-lbl">全部合計</span>
     <span class="grand-val" id="grand-time"></span>
   </div>
   <div id="budget-row" style="display:none"></div>
@@ -403,10 +431,11 @@
 let curSegs = [];        // { ms } 正在建立；ms 可負
 let editingCur = -1;     // curSegs 中正在編輯的 index
 
-let units = [];          // { name, limMs, note, segs:[{ms}] }
+let units = [];          // { name, limMs, note, segs:[{ms}], days:[1,2,3,4] }
 let openUnit = -1;       // 展開的單元 index
 let editingUSeg = null;  // { ui, si }
-let editingUnit = -1; // 正在編輯的單元 index（改名／排序／上限）
+let editingUnit = -1; // 正在編輯的單元 index（改名／排序／上限／天數）
+let activeDayTab = 0;    // 0=全部，1~4=第幾天（篩選顯示用）
 
 const STORAGE_KEY = 'timecalc_units_v1';
 
@@ -455,7 +484,7 @@ function importJSON(input){
       // 合併（避免重名覆蓋）
       incoming.forEach(u => {
         if(u && typeof u.name==='string' && Array.isArray(u.segs)){
-          units.push({ name: u.name, limMs: u.limMs||0, note: u.note||'', segs: u.segs });
+          units.push({ name: u.name, limMs: u.limMs||0, note: u.note||'', segs: u.segs, days: u.days||[] });
         }
       });
       saveData(); renderUnits();
@@ -596,9 +625,11 @@ function saveUnit(){
   if(!curSegs.length){ warn('⚠️ 請先加入至少一個段落'); return; }
   const name=$('unitName').value.trim()||`單元 ${units.length+1}`;
   const limMs=toMs(nv('limH'),nv('limM'),nv('limS'),0);
-  units.push({name, limMs, note:'', segs:[...curSegs]});
+  const days=[1,2,3,4].filter(d=>$(`newday-${d}`)?.checked);
+  units.push({name, limMs, note:'', segs:[...curSegs], days});
   $('unitName').value='';
   ['limH','limM','limS'].forEach(id=>$(id).value='');
+  [1,2,3,4].forEach(d=>{ const el=$(`newday-${d}`); if(el) el.checked=false; });
   curSegs=[]; editingCur=-1;
   renderCur(); saveData(); renderUnits();
 }
@@ -672,6 +703,7 @@ function flushEditUnit(ui){
   const lm=parseInt($(`ue-lm-${ui}`)?.value)||0;
   const ls=parseInt($(`ue-ls-${ui}`)?.value)||0;
   units[ui].limMs=toMs(lh,lm,ls,0);
+  units[ui].days=[1,2,3,4].filter(d=>$(`ue-day-${d}-${ui}`)?.checked);
 }
 
 function confirmEditUnit(ui){
@@ -694,6 +726,23 @@ function moveUnit(i,dir){
 function clearUnitLimit(ui){
   ['ue-lh','ue-lm','ue-ls'].forEach(p=>{ const el=$(`${p}-${ui}`); if(el) el.value=''; });
 }
+
+/* ── 天數分頁 ── */
+function unitMatchesTab(u, tab){
+  if(tab===0) return true;
+  return !u.days || !u.days.length || u.days.includes(tab);
+}
+function daysLabel(days){
+  if(!days || !days.length) return '';
+  return `<span style="font-size:.72rem;color:var(--muted);">📅${days.map(d=>`第${d}天`).join('、')}</span>`;
+}
+function renderDayTabs(){
+  const labels=['全部','第1天','第2天','第3天','第4天'];
+  $('day-tabs').innerHTML = labels.map((l,i)=>
+    `<button class="day-tab${activeDayTab===i?' active':''}" onclick="setDayTab(${i})">${l}</button>`
+  ).join('');
+}
+function setDayTab(tab){ activeDayTab=tab; renderUnits(); }
 
 /* ── 緊湊時間格式（只顯示有意義的單位）── */
 function fmtShort(ms){
@@ -725,14 +774,19 @@ function getEditVals(prefix, suffix){
 
 /* ── 單元列表渲染 ── */
 function renderUnits(){
-  const list=$('unit-list'), grandRow=$('grand-row'), expBtn=$('export-btn');
+  const list=$('unit-list'), grandRow=$('grand-row'), expBtn=$('export-btn'), budgetEl=$('budget-row');
   if(!units.length){
+    $('day-tabs').innerHTML='';
     list.innerHTML='<div class="empty-hint">尚無儲存的單元</div>';
-    grandRow.style.display='none'; expBtn.style.display='none'; return;
+    grandRow.style.display='none'; expBtn.style.display='none'; budgetEl.style.display='none';
+    return;
   }
+  renderDayTabs();
 
-  let grand=0, limTotal=0, actualWithLim=0, limCount=0, html='';
+  let grand=0, limTotal=0, actualWithLim=0, limCount=0, html='', shown=0;
   units.forEach((u,ui)=>{
+    if(!unitMatchesTab(u, activeDayTab)) return;
+    shown++;
     const total=Math.max(0,sumSegs(u.segs));
     grand+=total;
     const hasLim=u.limMs>0, over=hasLim&&total>u.limMs, isOpen=openUnit===ui;
@@ -748,6 +802,7 @@ function renderUnits(){
     const limNote=hasLim?`<span style="font-size:.72rem;color:var(--muted);">上限 ${fmtMs(u.limMs)}</span>`:'';
     const isEditing=editingUnit===ui;
     const {h:lh,m:lm,s:ls}=splitMs(u.limMs);
+    const dTag=daysLabel(u.days);
 
     const headerHtml = isEditing
       ? `<div class="unit-header">
@@ -771,10 +826,18 @@ function renderUnits(){
            <input type="number" id="ue-ls-${ui}" class="ue-mini" min="0" max="59" value="${ls||''}" placeholder="秒">
            <span class="ue-lbl">秒</span>
            <button class="btn-clear-lim" onclick="clearUnitLimit(${ui})">清除上限</button>
+         </div>
+         <div class="unit-edit-panel">
+           <span class="ue-lbl">演出天數</span>
+           <label class="day-chk"><input type="checkbox" id="ue-day-1-${ui}" ${u.days&&u.days.includes(1)?'checked':''}>第1天</label>
+           <label class="day-chk"><input type="checkbox" id="ue-day-2-${ui}" ${u.days&&u.days.includes(2)?'checked':''}>第2天</label>
+           <label class="day-chk"><input type="checkbox" id="ue-day-3-${ui}" ${u.days&&u.days.includes(3)?'checked':''}>第3天</label>
+           <label class="day-chk"><input type="checkbox" id="ue-day-4-${ui}" ${u.days&&u.days.includes(4)?'checked':''}>第4天</label>
          </div>`
       : `<div class="unit-header" onclick="toggleUnit(${ui})">
            <span class="expand-icon ${isOpen?'open':''}">▶</span>
            <span class="unit-name">${esc(u.name)}</span>
+           ${dTag}
            ${limNote}
            <span class="unit-total">${fmtMs(total)}</span>
            ${badge}
@@ -788,18 +851,25 @@ function renderUnits(){
     </div>`;
   });
 
+  if(!shown){
+    list.innerHTML=`<div class="empty-hint">沒有第${activeDayTab}天的單元</div>`;
+    grandRow.style.display='none'; expBtn.style.display='none'; budgetEl.style.display='none';
+    return;
+  }
+
   list.innerHTML=html;
+  $('grand-lbl').textContent = activeDayTab===0?'全部合計':`第${activeDayTab}天合計`;
   $('grand-time').textContent=fmtMs(grand);
   grandRow.style.display='flex'; expBtn.style.display='block';
 
   // 整體餘裕列
-  const budgetEl=$('budget-row');
   if(limCount>0){
     const net=limTotal-actualWithLim;
     const surplus=net>=0;
+    const dayLbl=activeDayTab===0?'':`第${activeDayTab}天　`;
     budgetEl.className=`budget-row ${surplus?'surplus':'deficit'}`;
     budgetEl.innerHTML=`
-      <span class="budget-lbl">整體餘裕（${limCount} 個有上限的單元）</span>
+      <span class="budget-lbl">${dayLbl}整體餘裕（${limCount} 個有上限的單元）</span>
       <span class="budget-val" style="color:var(${surplus?'--green':'--red'})">
         ${surplus?'可挪用 +':'超支 -'}${fmtShort(Math.abs(net))}
       </span>`;
@@ -905,21 +975,23 @@ function renderDetail(u, ui){
 /* ── 匯出 ── */
 function exportText(){
   flushNote();
-  if(!units.length) return;
+  const list=units.filter(u=>unitMatchesTab(u, activeDayTab));
+  if(!list.length) return;
   let grand=0, limTotal=0, actualWithLim=0, limCount=0;
-  units.forEach(u=>{
+  list.forEach(u=>{
     const total=Math.max(0,sumSegs(u.segs));
     grand+=total;
     if(u.limMs>0){ limTotal+=u.limMs; actualWithLim+=total; limCount++; }
   });
-  const lines=['【時間計算器 — 單元摘要】',''];
+  const dayTitle=activeDayTab===0?'':`（第${activeDayTab}天）`;
+  const lines=[`【時間計算器 — 單元摘要】${dayTitle}`,''];
   lines.push(`⏳ 全部合計：${fmtMs(grand)}`);
   if(limCount>0){
     const net=limTotal-actualWithLim;
     lines.push(net>=0?`✅ 剩餘 ${fmtMs(net)}`:`❌ 超時 ${fmtMs(Math.abs(net))}`);
   }
   lines.push('','各單元細項','');
-  units.forEach(u=>{
+  list.forEach(u=>{
     const total=Math.max(0,sumSegs(u.segs));
     const hasLim=u.limMs>0;
     const diff=hasLim?fmtMs(Math.abs(u.limMs-total)):'';
