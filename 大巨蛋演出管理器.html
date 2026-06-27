@@ -74,6 +74,12 @@
       font-family: inherit; resize: vertical; min-height: 36px;
     }
     .note-add-row input:focus, .note-add-row textarea:focus { outline: none; border-color: var(--primary); }
+    .note-resolved { text-decoration: line-through; color: var(--muted); }
+    .tang-toolbar {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      padding: 10px 12px; background: var(--primary-l); border-radius: 8px;
+      margin-bottom: 12px; font-size: .85rem;
+    }
     .settings-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .settings-row .ll { font-size: .85rem; color: var(--muted); white-space: nowrap; }
     .settings-row input[type="text"] {
@@ -530,6 +536,13 @@
 <div class="card" id="section-tangnotes" style="display:none">
   <div class="sec-label">唐團工作筆記</div>
   <div class="save-hint" style="margin:0 0 14px">列出主演／例外列入的節目，可記錄音樂檔案狀態與各類筆記（音樂／演員／影像）</div>
+  <div class="day-tabs">
+    <button class="day-tab" id="tangmode-unit-btn" onclick="setTangViewMode('unit')">依節目檢視</button>
+    <button class="day-tab" id="tangmode-notes-btn" onclick="setTangViewMode('notes')">依筆記類別檢視</button>
+  </div>
+  <div id="tangnotes-toolbar"></div>
+  <div id="tangnotes-category-tabs" class="day-tabs"></div>
+  <div id="tangnotes-hide-resolved"></div>
   <div id="tangnotes-list"></div>
   <datalist id="noteCategoryList"></datalist>
 </div>
@@ -550,6 +563,11 @@ let hideAllDayUnits = false; // 是否隱藏「每天都演」的節目
 let appTitle = '大巨蛋演出管理器';
 let tangNotesView = false; // 是否正在顯示「唐團工作筆記」頁面
 let openTangNote = -1;     // 唐團筆記頁面中展開的節目 index（對應 units 全域 index）
+let tangViewMode = 'unit'; // 'unit'=依節目檢視，'notes'=依筆記類別檢視
+let activeNoteCategory = ''; // 依筆記類別檢視時選定的類別，''=全部
+let hideResolvedNotes = false; // 是否隱藏已解決筆記
+let selectedTangUnits = new Set(); // 依節目檢視：勾選要批次設定音樂狀態的節目 index
+let selectedNoteKeys = new Set();  // 依筆記類別檢視：勾選要批次標記已解決的筆記 key（`${ui}:${id}`）
 
 const TEAMS = ['唐團','優團','入經藏','法髓團'];
 const STORAGE_KEY = 'gigadome_units_v1';
@@ -737,13 +755,15 @@ function importJSON(input){
       const incoming = Array.isArray(data) ? data : (data.units || []);
       // 驗證基本結構
       if(!Array.isArray(incoming)) throw new Error('格式錯誤');
-      if(units.length > 0 && !confirm(`目前已有 ${units.length} 個節目，匯入後將會合併（不覆蓋）。確定繼續嗎？`)){
+      if(units.length > 0 && !confirm(`目前已有 ${units.length} 個節目，匯入後「同名節目」會被覆蓋更新，其他節目不受影響、新節目會新增進來。確定繼續嗎？`)){
         input.value=''; return;
       }
-      // 合併（避免重名覆蓋）
+      // 同名覆蓋，否則新增
       incoming.forEach(u => {
         if(u && typeof u.name==='string' && Array.isArray(u.segs)){
-          units.push({ name: u.name, limMs: u.limMs||0, note: u.note||'', segs: u.segs, days: u.days||[], mainTeam: u.mainTeam||'', supportTeams: u.supportTeams||[], category: u.category||'', inTangNotes: u.inTangNotes||false, musicStatus: u.musicStatus||'none', notes: u.notes||[] });
+          const newUnit={ name: u.name, limMs: u.limMs||0, note: u.note||'', segs: u.segs, days: u.days||[], mainTeam: u.mainTeam||'', supportTeams: u.supportTeams||[], category: u.category||'', inTangNotes: u.inTangNotes||false, musicStatus: u.musicStatus||'none', notes: u.notes||[] };
+          const idx=units.findIndex(existing=>existing.name===newUnit.name);
+          if(idx>=0) units[idx]=newUnit; else units.push(newUnit);
         }
       });
       saveData(); renderUnits();
@@ -1398,7 +1418,15 @@ function toggleTangNotesView(){
   $('section-units').style.display = tangNotesView?'none':'';
   $('section-tangnotes').style.display = tangNotesView?'':'none';
   $('tangnotes-toggle-btn').classList.toggle('active', tangNotesView);
-  if(tangNotesView){ openTangNote=-1; renderTangNotes(); }
+  if(tangNotesView){
+    openTangNote=-1; selectedTangUnits.clear(); selectedNoteKeys.clear();
+    renderTangNotes();
+  }
+}
+function setTangViewMode(mode){
+  tangViewMode=mode;
+  selectedTangUnits.clear(); selectedNoteKeys.clear();
+  renderTangNotes();
 }
 function cycleMusicStatus(ui){
   const cur=units[ui].musicStatus||'none';
@@ -1415,40 +1443,110 @@ function getNoteCategories(){
   units.forEach(u=>(u.notes||[]).forEach(n=>set.add(n.category)));
   return [...set];
 }
+function noteKey(ui,id){ return `${ui}:${id}`; }
 function addNote(ui){
   const catEl=$(`note-cat-${ui}`), textEl=$(`note-text-${ui}`);
   const category=catEl.value.trim()||'其他';
   const text=textEl.value.trim();
   if(!text){ warn('⚠️ 請輸入筆記內容'); return; }
   if(!units[ui].notes) units[ui].notes=[];
-  units[ui].notes.push({ id:Date.now()+Math.random(), category, text, ts:new Date().toISOString() });
+  units[ui].notes.push({ id:Date.now()+Math.random(), category, text, ts:new Date().toISOString(), resolved:false });
   saveData(); renderTangNotes();
 }
 function delNote(ui, id){
   units[ui].notes=(units[ui].notes||[]).filter(n=>n.id!==id);
+  selectedNoteKeys.delete(noteKey(ui,id));
   saveData(); renderTangNotes();
 }
+
+/* ── 批次：音樂檔案狀態（依節目檢視） ── */
+function toggleSelectTangUnit(ui){
+  if(selectedTangUnits.has(ui)) selectedTangUnits.delete(ui); else selectedTangUnits.add(ui);
+  renderTangNotes();
+}
+function clearTangUnitSelection(){ selectedTangUnits.clear(); renderTangNotes(); }
+function batchSetMusicStatus(status){
+  if(!selectedTangUnits.size){ warn('⚠️ 請先勾選節目'); return; }
+  selectedTangUnits.forEach(ui=>{ units[ui].musicStatus=status; });
+  saveData(); renderTangNotes();
+}
+
+/* ── 批次：筆記已解決（依筆記類別檢視） ── */
+function toggleNoteResolved(ui,id){
+  const note=(units[ui].notes||[]).find(n=>n.id===id);
+  if(note) note.resolved=!note.resolved;
+  saveData(); renderTangNotes();
+}
+function toggleSelectNote(ui,id){
+  const key=noteKey(ui,id);
+  if(selectedNoteKeys.has(key)) selectedNoteKeys.delete(key); else selectedNoteKeys.add(key);
+  renderTangNotes();
+}
+function clearNoteSelection(){ selectedNoteKeys.clear(); renderTangNotes(); }
+function batchSetNotesResolved(resolved){
+  if(!selectedNoteKeys.size){ warn('⚠️ 請先勾選筆記'); return; }
+  selectedNoteKeys.forEach(key=>{
+    const [uiStr,idStr]=key.split(':');
+    const ui=parseInt(uiStr,10), id=Number(idStr);
+    const note=(units[ui].notes||[]).find(n=>n.id===id);
+    if(note) note.resolved=resolved;
+  });
+  selectedNoteKeys.clear();
+  saveData(); renderTangNotes();
+}
+function setNoteCategoryTab(cat){ activeNoteCategory=cat; renderTangNotes(); }
+function toggleHideResolvedNotes(){
+  hideResolvedNotes=$('hideResolvedChk').checked;
+  renderTangNotes();
+}
+
+/* ── 唐團筆記主渲染（依模式分派） ── */
 function renderTangNotes(){
+  $('tangmode-unit-btn').classList.toggle('active', tangViewMode==='unit');
+  $('tangmode-notes-btn').classList.toggle('active', tangViewMode==='notes');
+  if(tangViewMode==='unit'){
+    $('tangnotes-category-tabs').style.display='none';
+    $('tangnotes-hide-resolved').innerHTML='';
+    renderTangNotesUnitView();
+  } else {
+    renderTangNotesByCategoryView();
+  }
+}
+
+function renderTangNotesUnitView(){
   const items=units.map((u,ui)=>({u,ui})).filter(({u})=>u.inTangNotes);
   const list=$('tangnotes-list');
+  const toolbar=$('tangnotes-toolbar');
   const cats=getNoteCategories();
   const dl=$('noteCategoryList');
   if(dl) dl.innerHTML=cats.map(c=>`<option value="${esc(c)}">`).join('');
+
+  toolbar.innerHTML = selectedTangUnits.size>0 ? `<div class="tang-toolbar">
+      <span>已選 ${selectedTangUnits.size} 個節目</span>
+      <button class="music-status-btn" onclick="batchSetMusicStatus('none')">❌ 設為尚無檔案</button>
+      <button class="music-status-btn" onclick="batchSetMusicStatus('yellow')">🟡 設為需修改</button>
+      <button class="music-status-btn" onclick="batchSetMusicStatus('green')">🟢 設為已有檔案</button>
+      <button class="btn-clear-lim" onclick="clearTangUnitSelection()">取消選取</button>
+    </div>` : '';
+
   if(!items.length){ list.innerHTML='<div class="empty-hint">目前沒有列入唐團筆記的節目</div>'; return; }
   list.innerHTML=items.map(({u,ui})=>{
     const meta=MUSIC_STATUS_META[u.musicStatus||'none'];
     const isOpen=openTangNote===ui;
     const notes=u.notes||[];
+    const checked=selectedTangUnits.has(ui);
     const notesHtml=notes.length
       ? notes.map(n=>`
           <div class="note-item">
             <span class="note-cat-tag">${esc(n.category)}</span>
-            <span class="note-text">${esc(n.text)}</span>
+            <span class="note-text${n.resolved?' note-resolved':''}">${esc(n.text)}</span>
+            ${n.resolved?'<span class="badge ok" style="flex-shrink:0">已解決</span>':''}
             <button class="bi d" onclick="delNote(${ui},${n.id})" title="刪除">✕</button>
           </div>`).join('')
       : '<div class="empty-hint" style="padding:8px 0">尚無筆記</div>';
     return `<div class="unit-item">
       <div class="unit-header" onclick="toggleTangNoteOpen(${ui})">
+        <input type="checkbox" onclick="event.stopPropagation();toggleSelectTangUnit(${ui})" ${checked?'checked':''}>
         <span class="expand-icon ${isOpen?'open':''}">▶</span>
         <span class="unit-name">${esc(u.name)}</span>
         ${categoryLabel(u.category)}
@@ -1463,6 +1561,61 @@ function renderTangNotes(){
           <button class="btn-dadd" onclick="addNote(${ui})">新增筆記</button>
         </div>
       </div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function renderTangNotesByCategoryView(){
+  const list=$('tangnotes-list');
+  const toolbar=$('tangnotes-toolbar');
+  const catTabsEl=$('tangnotes-category-tabs');
+  const hideEl=$('tangnotes-hide-resolved');
+
+  const allNotes=[];
+  units.forEach((u,ui)=>{
+    if(!u.inTangNotes) return;
+    (u.notes||[]).forEach(n=>allNotes.push({ ui, u, n }));
+  });
+
+  const cats=getNoteCategories();
+  const dl=$('noteCategoryList');
+  if(dl) dl.innerHTML=cats.map(c=>`<option value="${esc(c)}">`).join('');
+
+  catTabsEl.style.display='flex';
+  const labels=['全部', ...cats];
+  catTabsEl.innerHTML=labels.map(l=>{
+    const val=l==='全部'?'':l;
+    const active=activeNoteCategory===val;
+    return `<button class="day-tab${active?' active':''}" onclick="setNoteCategoryTab('${val.replace(/'/g,"\\'")}')">${l}</button>`;
+  }).join('');
+
+  hideEl.innerHTML=`<label class="day-chk" style="margin:10px 0 14px;display:inline-flex">
+    <input type="checkbox" id="hideResolvedChk" onchange="toggleHideResolvedNotes()" ${hideResolvedNotes?'checked':''}>隱藏已解決筆記
+  </label>`;
+
+  let filtered=allNotes.filter(({n})=> !activeNoteCategory || n.category===activeNoteCategory );
+  if(hideResolvedNotes) filtered=filtered.filter(({n})=>!n.resolved);
+
+  toolbar.innerHTML = selectedNoteKeys.size>0 ? `<div class="tang-toolbar">
+      <span>已選 ${selectedNoteKeys.size} 筆筆記</span>
+      <button class="music-status-btn" onclick="batchSetNotesResolved(true)">✓ 標記已解決</button>
+      <button class="music-status-btn" onclick="batchSetNotesResolved(false)">↩ 取消已解決</button>
+      <button class="btn-clear-lim" onclick="clearNoteSelection()">取消選取</button>
+    </div>` : '';
+
+  if(!filtered.length){ list.innerHTML='<div class="empty-hint">沒有符合條件的筆記</div>'; return; }
+
+  list.innerHTML=filtered.map(({ui,u,n})=>{
+    const key=noteKey(ui,n.id);
+    const checked=selectedNoteKeys.has(key);
+    return `<div class="note-item" style="align-items:center">
+      <input type="checkbox" ${checked?'checked':''} onclick="toggleSelectNote(${ui},${n.id})">
+      <span class="note-cat-tag">${esc(n.category)}</span>
+      <span class="note-text${n.resolved?' note-resolved':''}" style="flex:1"><strong>${esc(u.name)}</strong>　${esc(n.text)}</span>
+      <label class="day-chk" style="flex-shrink:0">
+        <input type="checkbox" ${n.resolved?'checked':''} onclick="toggleNoteResolved(${ui},${n.id})">已解決
+      </label>
+      <button class="bi d" onclick="delNote(${ui},${n.id})" title="刪除">✕</button>
     </div>`;
   }).join('');
 }
