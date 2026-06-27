@@ -416,7 +416,7 @@
   <hr class="div">
 
   <div class="save-row">
-    <input type="text" id="unitName" placeholder="單元名稱（例：佛陀的一生）" maxlength="50">
+    <input type="text" id="unitName" placeholder="節目名稱（例：佛陀的一生）" maxlength="50">
     <div class="lim-wrap">
       <span class="ll">上限</span>
       <input type="number" class="lim-mini" id="limH" min="0" placeholder="時">
@@ -425,7 +425,12 @@
       <span class="ll">:</span>
       <input type="number" class="lim-mini" id="limS" min="0" max="59" placeholder="秒">
     </div>
-    <button class="btn-save" onclick="saveUnit()">儲存單元 ✓</button>
+    <button class="btn-save" onclick="saveUnit()">儲存節目 ✓</button>
+  </div>
+  <div class="day-pick" style="margin-top:6px">
+    <span class="ll">單元</span>
+    <input type="text" id="newCategory" class="team-select" list="categoryList" placeholder="例：02慈善" style="width:140px">
+    <datalist id="categoryList"></datalist>
   </div>
   <div class="day-pick" style="margin-top:10px">
     <span class="ll">演出天數</span>
@@ -451,18 +456,19 @@
     <label class="day-chk"><input type="checkbox" id="newsup-2">入經藏</label>
     <label class="day-chk"><input type="checkbox" id="newsup-3">法髓團</label>
   </div>
-  <div class="save-hint">💡 上限欄位可留空；演出天數可留空（代表每天都演）；儲存後段落自動清空</div>
+  <div class="save-hint">💡 上限欄位可留空；演出天數可留空（代表每天都演）；單元可留空；儲存後段落自動清空</div>
 </div>
 
-<!-- ── 各單元紀錄 ── -->
+<!-- ── 各節目紀錄 ── -->
 <div class="card">
-  <div class="sec-label">各單元紀錄</div>
+  <div class="sec-label">各節目紀錄</div>
+  <div class="day-tabs" id="category-tabs"></div>
   <div class="day-tabs" id="day-tabs"></div>
   <div class="day-tabs" id="team-tabs"></div>
   <label class="day-chk" style="margin-bottom:14px;display:inline-flex">
-    <input type="checkbox" id="hideAllDayChk" onchange="toggleHideAllDay()">隱藏每天都演的單元
+    <input type="checkbox" id="hideAllDayChk" onchange="toggleHideAllDay()">隱藏每天都演的節目
   </label>
-  <div id="unit-list"><div class="empty-hint">尚無儲存的單元</div></div>
+  <div id="unit-list"><div class="empty-hint">尚無儲存的節目</div></div>
   <div class="grand-row" id="grand-row" style="display:none">
     <span class="grand-lbl" id="grand-lbl">全部合計</span>
     <span class="grand-val" id="grand-time"></span>
@@ -490,7 +496,8 @@ let editingUSeg = null;  // { ui, si }
 let editingUnit = -1; // 正在編輯的單元 index（改名／排序／上限／天數／團隊）
 let activeDayTab = 0;    // 0=全部，1~4=第幾天（篩選顯示用）
 let activeTeamTab = 0;   // 0=全部，1~4=對應 TEAMS 索引（篩選顯示用）
-let hideAllDayUnits = false; // 是否隱藏「每天都演」的單元
+let activeCategory = ''; // ''=全部，否則為指定的單元（category）名稱
+let hideAllDayUnits = false; // 是否隱藏「每天都演」的節目
 let appTitle = '大巨蛋演出管理器';
 
 const TEAMS = ['唐團','優團','入經藏','法髓團'];
@@ -662,7 +669,7 @@ function importJSON(input){
       const incoming = Array.isArray(data) ? data : (data.units || []);
       // 驗證基本結構
       if(!Array.isArray(incoming)) throw new Error('格式錯誤');
-      if(units.length > 0 && !confirm(`目前已有 ${units.length} 個單元，匯入後將會合併（不覆蓋）。確定繼續嗎？`)){
+      if(units.length > 0 && !confirm(`目前已有 ${units.length} 個節目，匯入後將會合併（不覆蓋）。確定繼續嗎？`)){
         input.value=''; return;
       }
       // 合併（避免重名覆蓋）
@@ -807,17 +814,19 @@ function renderCur(){
 /* ── 儲存單元 ── */
 function saveUnit(){
   if(!curSegs.length){ warn('⚠️ 請先加入至少一個段落'); return; }
-  const name=$('unitName').value.trim()||`單元 ${units.length+1}`;
+  const name=$('unitName').value.trim()||`節目 ${units.length+1}`;
   const limMs=toMs(nv('limH'),nv('limM'),nv('limS'),0);
   const days=[1,2,3,4].filter(d=>$(`newday-${d}`)?.checked);
   const mainTeam=$('newMainTeam').value;
   const supportTeams=TEAMS.filter((t,i)=>$(`newsup-${i}`)?.checked);
-  units.push({name, limMs, note:'', segs:[...curSegs], days, mainTeam, supportTeams});
+  const category=$('newCategory').value.trim();
+  units.push({name, limMs, note:'', segs:[...curSegs], days, mainTeam, supportTeams, category});
   $('unitName').value='';
   ['limH','limM','limS'].forEach(id=>$(id).value='');
   [1,2,3,4].forEach(d=>{ const el=$(`newday-${d}`); if(el) el.checked=false; });
   $('newMainTeam').value='';
   TEAMS.forEach((t,i)=>{ const el=$(`newsup-${i}`); if(el) el.checked=false; });
+  $('newCategory').value='';
   curSegs=[]; editingCur=-1;
   renderCur(); saveData(); renderUnits();
 }
@@ -895,6 +904,8 @@ function flushEditUnit(ui){
   const mainSel=$(`ue-main-${ui}`);
   if(mainSel) units[ui].mainTeam=mainSel.value;
   units[ui].supportTeams=TEAMS.filter((t,i)=>$(`ue-sup-${i}-${ui}`)?.checked);
+  const catEl=$(`ue-category-${ui}`);
+  if(catEl) units[ui].category=catEl.value.trim();
 }
 
 function confirmEditUnit(ui){
@@ -942,11 +953,10 @@ function unitMatchesTeam(u, tab){
   return u.mainTeam===team || (u.supportTeams||[]).includes(team);
 }
 function teamLabel(u){
-  const parts=[];
-  if(u.mainTeam) parts.push(u.mainTeam);
-  if(u.supportTeams&&u.supportTeams.length) parts.push(`支援${u.supportTeams.join('、')}`);
-  if(!parts.length) return '';
-  return `<span style="font-size:.72rem;color:var(--muted);">🎭${parts.join(' ')}</span>`;
+  if(!u.mainTeam && !(u.supportTeams&&u.supportTeams.length)) return '';
+  const main=u.mainTeam||'無主演';
+  const sup=(u.supportTeams&&u.supportTeams.length)?`（${u.supportTeams.join('、')}支援）`:'';
+  return `<span style="font-size:.72rem;color:var(--muted);">🎭${main}${sup}</span>`;
 }
 function renderTeamTabs(){
   const labels=['全部團隊', ...TEAMS];
@@ -956,7 +966,33 @@ function renderTeamTabs(){
 }
 function setTeamTab(tab){ activeTeamTab=tab; renderUnits(); }
 
-/* ── 隱藏每天都演的單元 ── */
+/* ── 單元分頁 ── */
+function unitMatchesCategory(u, cat){
+  if(!cat) return true;
+  return (u.category||'')===cat;
+}
+function categoryLabel(category){
+  if(!category) return '';
+  return `<span style="font-size:.72rem;color:var(--muted);">🗂${esc(category)}</span>`;
+}
+function getAllCategories(){
+  const set=new Set();
+  units.forEach(u=>{ if(u.category) set.add(u.category); });
+  return [...set].sort();
+}
+function renderCategoryTabs(){
+  const cats=getAllCategories();
+  const datalist=$('categoryList');
+  if(datalist) datalist.innerHTML=cats.map(c=>`<option value="${esc(c)}">`).join('');
+  if(!cats.length){ $('category-tabs').innerHTML=''; return; }
+  const labels=['全部單元', ...cats];
+  $('category-tabs').innerHTML = labels.map((l,i)=>
+    `<button class="day-tab${(i===0?activeCategory==='':activeCategory===l)?' active':''}" onclick="setCategoryTab(${i===0?`''`:`'${l.replace(/'/g,"\\'")}'`})">${l}</button>`
+  ).join('');
+}
+function setCategoryTab(cat){ activeCategory=cat; renderUnits(); }
+
+/* ── 隱藏每天都演的節目 ── */
 function isEveryDayUnit(u){
   return !u.days || !u.days.length || u.days.length>=4;
 }
@@ -965,8 +1001,9 @@ function toggleHideAllDay(){
   renderUnits();
 }
 
-/* ── 綜合篩選（天數 × 團隊 × 隱藏每天都演）── */
+/* ── 綜合篩選（單元 × 天數 × 團隊 × 隱藏每天都演）── */
 function unitVisible(u){
+  if(!unitMatchesCategory(u, activeCategory)) return false;
   if(!unitMatchesTab(u, activeDayTab)) return false;
   if(!unitMatchesTeam(u, activeTeamTab)) return false;
   if(hideAllDayUnits && isEveryDayUnit(u)) return false;
@@ -974,6 +1011,7 @@ function unitVisible(u){
 }
 function filterLabel(){
   const parts=[];
+  if(activeCategory) parts.push(activeCategory);
   if(activeDayTab>0) parts.push(`第${activeDayTab}天`);
   if(activeTeamTab>0) parts.push(TEAMS[activeTeamTab-1]);
   return parts.length ? parts.join('・')+'　' : '';
@@ -1015,12 +1053,12 @@ function getEditVals(prefix, suffix){
 function renderUnits(){
   const list=$('unit-list'), grandRow=$('grand-row'), expBtn=$('export-btn'), budgetEl=$('budget-row');
   if(!units.length){
-    $('day-tabs').innerHTML=''; $('team-tabs').innerHTML='';
-    list.innerHTML='<div class="empty-hint">尚無儲存的單元</div>';
+    $('day-tabs').innerHTML=''; $('team-tabs').innerHTML=''; $('category-tabs').innerHTML='';
+    list.innerHTML='<div class="empty-hint">尚無儲存的節目</div>';
     grandRow.style.display='none'; expBtn.style.display='none'; budgetEl.style.display='none';
     return;
   }
-  renderDayTabs(); renderTeamTabs();
+  renderCategoryTabs(); renderDayTabs(); renderTeamTabs();
 
   let grand=0, limTotal=0, actualWithLim=0, limCount=0, html='', shown=0;
   units.forEach((u,ui)=>{
@@ -1043,6 +1081,7 @@ function renderUnits(){
     const {h:lh,m:lm,s:ls}=splitMs(u.limMs);
     const dTag=daysLabel(u.days);
     const tTag=teamLabel(u);
+    const cTag=categoryLabel(u.category);
 
     const headerHtml = isEditing
       ? `<div class="unit-header">
@@ -1090,10 +1129,15 @@ function renderUnits(){
            <label class="day-chk"><input type="checkbox" id="ue-sup-1-${ui}" ${u.supportTeams&&u.supportTeams.includes('優團')?'checked':''}>優團</label>
            <label class="day-chk"><input type="checkbox" id="ue-sup-2-${ui}" ${u.supportTeams&&u.supportTeams.includes('入經藏')?'checked':''}>入經藏</label>
            <label class="day-chk"><input type="checkbox" id="ue-sup-3-${ui}" ${u.supportTeams&&u.supportTeams.includes('法髓團')?'checked':''}>法髓團</label>
+         </div>
+         <div class="unit-edit-panel">
+           <span class="ue-lbl">單元</span>
+           <input type="text" id="ue-category-${ui}" class="team-select" list="categoryList" value="${esc(u.category||'')}" placeholder="例：02慈善" style="width:140px" onclick="event.stopPropagation()">
          </div>`
       : `<div class="unit-header" onclick="toggleUnit(${ui})">
            <span class="expand-icon ${isOpen?'open':''}">▶</span>
            <span class="unit-name">${esc(u.name)}</span>
+           ${cTag}
            ${dTag}
            ${tTag}
            ${limNote}
@@ -1111,7 +1155,7 @@ function renderUnits(){
 
   const fl=filterLabel();
   if(!shown){
-    list.innerHTML=`<div class="empty-hint">${fl?`沒有符合「${fl.trim()}」的單元`:'目前篩選條件下沒有單元'}</div>`;
+    list.innerHTML=`<div class="empty-hint">${fl?`沒有符合「${fl.trim()}」的節目`:'目前篩選條件下沒有節目'}</div>`;
     grandRow.style.display='none'; expBtn.style.display='none'; budgetEl.style.display='none';
     return;
   }
@@ -1127,7 +1171,7 @@ function renderUnits(){
     const surplus=net>=0;
     budgetEl.className=`budget-row ${surplus?'surplus':'deficit'}`;
     budgetEl.innerHTML=`
-      <span class="budget-lbl">${fl}整體餘裕（${limCount} 個有上限的單元）</span>
+      <span class="budget-lbl">${fl}整體餘裕（${limCount} 個有上限的節目）</span>
       <span class="budget-val" style="color:var(${surplus?'--green':'--red'})">
         ${surplus?'可挪用 +':'超支 -'}${fmtShort(Math.abs(net))}
       </span>`;
@@ -1242,13 +1286,13 @@ function exportText(){
     if(u.limMs>0){ limTotal+=u.limMs; actualWithLim+=total; limCount++; }
   });
   const fl=filterLabel();
-  const lines=[`【${appTitle} — 單元摘要】${fl?`（${fl.trim()}）`:''}`,''];
+  const lines=[`【${appTitle} — 節目摘要】${fl?`（${fl.trim()}）`:''}`,''];
   lines.push(`⏳ 全部合計：${fmtMs(grand)}`);
   if(limCount>0){
     const net=limTotal-actualWithLim;
     lines.push(net>=0?`✅ 剩餘 ${fmtMs(net)}`:`❌ 超時 ${fmtMs(Math.abs(net))}`);
   }
-  lines.push('','各單元細項','');
+  lines.push('','各節目細項','');
   list.forEach(u=>{
     const total=Math.max(0,sumSegs(u.segs));
     const hasLim=u.limMs>0;
