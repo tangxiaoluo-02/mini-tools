@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title id="page-title">🎭 大巨蛋演出管理器</title>
+  <style>
+    :root {
+      --bg: #eff6ff;
+      --card: #ffffff;
+      --inner: #f0f7ff;
+      --primary: #2563eb;
+      --primary-h: #1d4ed8;
+      --primary-l: #dbeafe;
+      --text: #1e3a5f;
+      --muted: #64748b;
+      --border: #bfdbfe;
+      --border-s: #e0eeff;
+      --green: #16a34a;
+      --green-bg: #dcfce7;
+      --red: #dc2626;
+      --red-bg: #fee2e2;
+      --amber: #b45309;
+      --amber-bg: #fef3c7;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; }
+    input[type="number"] { -moz-appearance: textfield; }
+
+    body {
+      font-family: 'Segoe UI', 'PingFang TC', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px 16px 48px;
+    }
+    h1 { text-align: center; font-size: 1.4rem; color: var(--primary); letter-spacing: 2px; }
+
+    .app-title-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 24px; position: relative; }
+    .btn-settings {
+      background: none; border: 1px solid var(--border); border-radius: 8px;
+      width: 30px; height: 30px; cursor: pointer; font-size: .95rem;
+      display: flex; align-items: center; justify-content: center;
+      position: absolute; right: 0;
+    }
+    .btn-settings:hover { background: var(--primary-l); }
+    .settings-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .settings-row .ll { font-size: .85rem; color: var(--muted); white-space: nowrap; }
+    .settings-row input[type="text"] {
+      flex: 1 1 160px; padding: 9px 12px; background: var(--inner);
+      border: 1.5px solid var(--border); border-radius: 8px; color: var(--text); font-size: .95rem;
+    }
+    .settings-row input[type="text"]:focus { outline: none; border-color: var(--primary); }
+
+    .card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 12px rgba(37,99,235,.08);
+      border: 1px solid var(--border);
+    }
+    .sec-label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 14px; font-weight: 600; }
+
+    /* ── 大顯示 ── */
+    .big-display {
+      font-family: 'Courier New', monospace;
+      font-size: 2.8rem;
+      text-align: center;
+      color: var(--primary);
+      background: var(--primary-l);
+      border-radius: 10px;
+      padding: 14px;
+      letter-spacing: 3px;
+      margin-bottom: 6px;
+      border: 1px solid var(--border);
+      user-select: all;
+    }
+    .display-hint { text-align: center; font-size: .7rem; color: var(--muted); margin-bottom: 12px; }
+
+    /* ── 段落列表 ── */
+    .seg-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+
+    .seg-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 10px;
+      background: var(--inner);
+      border-radius: 8px;
+      border: 1px solid var(--border-s);
+    }
+    .seg-row.editing { background: #fffbeb; border-color: #fbbf24; }
+
+    .seg-prefix { font-size: 1rem; color: var(--muted); width: 22px; text-align: center; flex-shrink: 0; font-weight: 600; }
+
+    .seg-time {
+      font-family: 'Courier New', monospace;
+      font-size: 1rem;
+      color: var(--primary);
+      cursor: pointer;
+      flex: 1;
+      padding: 2px 6px;
+      border-radius: 4px;
+      transition: background .1s;
+    }
+    .seg-time:hover { background: var(--primary-l); }
+    .seg-time.neg { color: var(--amber); }
+
+    .seg-edit-row {
+      display: flex; align-items: center; gap: 4px; flex: 1; flex-wrap: wrap;
+    }
+    .seg-edit-row input {
+      width: 50px; padding: 5px 3px; text-align: center;
+      border: 1.5px solid var(--border); border-radius: 6px;
+      font-size: .95rem; font-family: 'Courier New', monospace; color: var(--text);
+      background: #fff;
+    }
+    .seg-edit-row input:focus { outline: none; border-color: var(--primary); }
+    .seg-edit-sep { font-size: .85rem; color: var(--muted); }
+
+    .seg-actions { display: flex; gap: 3px; flex-shrink: 0; }
+
+    .bi {
+      width: 28px; height: 28px; border: none; border-radius: 6px;
+      cursor: pointer; font-size: .85rem; display: flex; align-items: center; justify-content: center;
+      transition: background .1s; background: transparent; color: var(--muted);
+    }
+    .bi:hover { background: var(--primary-l); color: var(--primary); }
+    .bi.d:hover { background: var(--red-bg); color: var(--red); }
+    .bi:disabled { opacity: .25; cursor: default; pointer-events: none; }
+
+    .btn-ok { padding: 4px 10px; background: var(--primary); color: #fff; border: none; border-radius: 5px; font-size: .82rem; cursor: pointer; white-space: nowrap; }
+    .btn-ok:hover { background: var(--primary-h); }
+    .btn-cx { padding: 4px 8px; background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 5px; font-size: .82rem; cursor: pointer; }
+
+    .seg-total-row {
+      display: flex; align-items: center; gap: 6px;
+      padding: 7px 10px; border-top: 2px solid var(--border); margin-top: 2px;
+    }
+    .seg-total-eq { font-size: 1rem; color: var(--muted); width: 22px; text-align: center; font-weight: 700; }
+    .seg-total-val { font-family: 'Courier New', monospace; font-size: 1.05rem; font-weight: 700; color: var(--primary); }
+
+    /* ── 輸入行 ── */
+    .time-row { display: flex; align-items: flex-end; justify-content: center; gap: 6px; flex-wrap: wrap; }
+    .tf { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .tf label { font-size: .7rem; color: var(--muted); font-weight: 600; }
+    .tf input {
+      width: 70px; padding: 10px 6px; text-align: center;
+      background: var(--inner); border: 1.5px solid var(--border); border-radius: 8px;
+      color: var(--text); font-size: 1.25rem; font-family: 'Courier New', monospace;
+      transition: border-color .15s;
+    }
+    .tf input:focus { outline: none; border-color: var(--primary); }
+    .sep { font-size: 1.5rem; color: var(--border); padding-bottom: 10px; user-select: none; }
+
+    /* ── 主按鈕 ── */
+    .btn-row { display: flex; gap: 10px; justify-content: center; margin-top: 14px; flex-wrap: wrap; }
+    .btn { padding: 10px 22px; border: none; border-radius: 9px; font-size: .95rem; font-weight: 700; cursor: pointer; transition: transform .08s, background .1s; }
+    .btn:active { transform: scale(.94); }
+    .btn-add { background: var(--primary); color: #fff; }
+    .btn-add:hover { background: var(--primary-h); }
+    .btn-sub { background: #fff; color: var(--red); border: 1.5px solid var(--red); }
+    .btn-sub:hover { background: var(--red-bg); }
+    .btn-rst { background: #f1f5f9; color: var(--muted); border: 1px solid #e2e8f0; }
+    .btn-rst:hover { background: #e2e8f0; }
+
+    .warn-msg { text-align: center; color: #d97706; font-size: .82rem; margin-top: 8px; min-height: 20px; }
+
+    hr.div { border: none; border-top: 1px solid var(--border-s); margin: 16px 0; }
+
+    /* ── 儲存行 ── */
+    .save-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .save-row input[type="text"] {
+      flex: 1 1 150px; padding: 10px 14px;
+      background: var(--inner); border: 1.5px solid var(--border); border-radius: 8px;
+      color: var(--text); font-size: .95rem;
+    }
+    .save-row input[type="text"]:focus { outline: none; border-color: var(--primary); }
+    .lim-wrap { display: flex; align-items: center; gap: 5px; }
+    .lim-wrap .ll { font-size: .8rem; color: var(--muted); white-space: nowrap; }
+    .lim-mini {
+      width: 50px; padding: 9px 4px; text-align: center;
+      background: var(--inner); border: 1.5px solid var(--border); border-radius: 7px;
+      color: var(--text); font-size: .9rem; font-family: 'Courier New', monospace;
+    }
+    .lim-mini:focus { outline: none; border-color: var(--primary); }
+    .btn-save {
+      padding: 10px 20px; background: var(--primary); color: #fff;
+      border: none; border-radius: 8px; font-size: .95rem; font-weight: 700;
+      cursor: pointer; white-space: nowrap; transition: background .1s, transform .08s;
+    }
+    .btn-save:hover { background: var(--primary-h); }
+    .btn-save:active { transform: scale(.94); }
+    .save-hint { font-size: .74rem; color: var(--muted); margin-top: 6px; }
+
+    /* ── 天數分頁 ── */
+    .day-tabs { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+    .day-tab {
+      padding: 6px 14px; border-radius: 20px; border: 1.5px solid var(--border);
+      background: #fff; color: var(--muted); font-size: .82rem; font-weight: 600;
+      cursor: pointer; transition: background .1s, color .1s, border-color .1s;
+    }
+    .day-tab:hover { border-color: var(--primary); color: var(--primary); }
+    .day-tab.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+    /* ── 演出天數勾選 ── */
+    .day-pick { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .day-pick .ll { font-size: .8rem; color: var(--muted); white-space: nowrap; }
+    .day-chk {
+      display: flex; align-items: center; gap: 3px; font-size: .82rem; color: var(--text);
+      cursor: pointer; background: var(--inner); border: 1px solid var(--border-s);
+      border-radius: 6px; padding: 5px 9px; white-space: nowrap;
+    }
+    .day-chk input { accent-color: var(--primary); cursor: pointer; }
+    .team-select {
+      padding: 7px 10px; background: var(--inner); border: 1.5px solid var(--border);
+      border-radius: 7px; color: var(--text); font-size: .85rem; cursor: pointer;
+    }
+    .team-select:focus { outline: none; border-color: var(--primary); }
+
+    /* ── 單元列表 ── */
+    #unit-list { display: flex; flex-direction: column; gap: 10px; }
+    .empty-hint { text-align: center; color: var(--muted); padding: 24px 0; font-size: .9rem; }
+
+    .unit-item { border: 1.5px solid var(--border); border-radius: 12px; overflow: hidden; }
+
+    .unit-header {
+      display: flex; align-items: center; padding: 12px 14px; gap: 10px;
+      cursor: pointer; transition: background .1s; flex-wrap: wrap;
+      user-select: none;
+    }
+    .unit-header:hover { background: var(--inner); }
+
+    .expand-icon { font-size: .75rem; color: var(--muted); transition: transform .2s; flex-shrink: 0; }
+    .expand-icon.open { transform: rotate(90deg); }
+
+    .unit-name { font-weight: 700; color: var(--text); font-size: .95rem; flex: 1; }
+    .unit-total { font-family: 'Courier New', monospace; font-size: 1rem; color: var(--primary); font-weight: 600; }
+
+    .badge { font-size: .72rem; font-weight: 700; padding: 3px 8px; border-radius: 20px; }
+    .ok   { background: var(--green-bg); color: var(--green); }
+    .over { background: var(--red-bg);   color: var(--red); }
+
+    .btn-del-u {
+      background: none; border: 1px solid #e2e8f0; color: #94a3b8;
+      padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: .78rem;
+      transition: border-color .1s, color .1s; white-space: nowrap;
+    }
+    .btn-del-u:hover { border-color: var(--red); color: var(--red); }
+
+    .btn-edit-u {
+      background: none; border: 1px solid var(--border); color: var(--primary);
+      padding: 4px 10px; border-radius: 6px; cursor: pointer; font-size: .78rem;
+      font-weight: 600; white-space: nowrap; transition: background .1s;
+    }
+    .btn-edit-u:hover { background: var(--primary-l); }
+
+    .btn-done-u {
+      background: var(--primary); color: #fff; border: none;
+      padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: .78rem;
+      font-weight: 700; white-space: nowrap; transition: background .1s;
+    }
+    .btn-done-u:hover { background: var(--primary-h); }
+
+    .unit-name-edit {
+      font-weight: 700; font-size: .92rem; flex: 1; min-width: 80px;
+      padding: 3px 8px; border: 1.5px solid var(--primary); border-radius: 6px;
+      background: #fff; color: var(--text); outline: none;
+    }
+
+    /* ── 單元編輯面板 ── */
+    .unit-edit-panel {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+      padding: 10px 14px; background: #fffbeb;
+      border-top: 1px dashed #fbbf24;
+    }
+    .ue-lbl { font-size: .78rem; color: var(--muted); white-space: nowrap; }
+    .ue-mini {
+      width: 50px; padding: 6px 4px; text-align: center;
+      border: 1.5px solid var(--border); border-radius: 7px;
+      font-size: .9rem; font-family: 'Courier New', monospace;
+      background: #fff; color: var(--text);
+    }
+    .ue-mini:focus { outline: none; border-color: var(--primary); }
+    .btn-clear-lim {
+      padding: 4px 10px; background: none; border: 1px solid #e2e8f0;
+      color: var(--muted); border-radius: 6px; font-size: .76rem; cursor: pointer;
+      transition: border-color .1s, color .1s;
+    }
+    .btn-clear-lim:hover { border-color: var(--red); color: var(--red); }
+
+    /* ── 單元詳情 ── */
+    .unit-detail { border-top: 1px solid var(--border-s); padding: 14px; background: var(--inner); }
+
+    /* ── 在詳情裡新增段落 ── */
+    .detail-add {
+      display: flex; align-items: flex-end; gap: 5px; flex-wrap: wrap;
+      padding-top: 10px; border-top: 1px dashed var(--border); margin-top: 8px;
+    }
+    .detail-add-lbl { font-size: .72rem; color: var(--muted); padding-bottom: 4px; white-space: nowrap; }
+    .mtf { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+    .mtf label { font-size: .6rem; color: var(--muted); }
+    .mtf input {
+      width: 50px; padding: 6px 3px; text-align: center;
+      background: #fff; border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text); font-size: .9rem; font-family: 'Courier New', monospace;
+    }
+    .mtf input:focus { outline: none; border-color: var(--primary); }
+    .msep { font-size: 1rem; color: var(--border); padding-bottom: 6px; }
+    .btn-dadd {
+      padding: 6px 14px; background: var(--primary); color: #fff;
+      border: none; border-radius: 7px; font-size: .85rem; font-weight: 700;
+      cursor: pointer; align-self: flex-end; white-space: nowrap;
+    }
+    .btn-dadd:hover { background: var(--primary-h); }
+
+    /* ── 備注 ── */
+    .note-row { display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--border); }
+    .note-lbl { font-size: .7rem; color: var(--muted); padding-top: 3px; flex-shrink: 0; }
+    .unit-note {
+      flex: 1; min-height: 22px; font-size: .85rem; color: var(--muted);
+      outline: none; border-radius: 5px; padding: 2px 6px; line-height: 1.6;
+      cursor: text; transition: background .15s; word-break: break-all; white-space: pre-wrap;
+    }
+    .unit-note:focus { background: var(--primary-l); color: var(--text); }
+    .unit-note:empty::before { content: attr(data-placeholder); color: #c0cfe0; pointer-events: none; }
+
+    /* ── 合計 ── */
+    .grand-row { display: flex; justify-content: space-between; align-items: center; padding-top: 14px; margin-top: 6px; border-top: 1px solid var(--border-s); }
+    .grand-lbl { color: var(--muted); font-size: .9rem; }
+    .grand-val { font-family: 'Courier New', monospace; font-size: 1.1rem; font-weight: 700; color: var(--green); }
+
+    .budget-row {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-top: 8px; padding: 8px 12px; border-radius: 8px; font-size: .88rem;
+    }
+    .budget-row.surplus { background: var(--green-bg); }
+    .budget-row.deficit { background: var(--red-bg); }
+    .budget-lbl { color: var(--muted); font-size: .82rem; }
+    .budget-val { font-family: 'Courier New', monospace; font-weight: 700; font-size: 1rem; }
+
+    .btn-export {
+      display: block; width: 100%; margin-top: 12px; padding: 9px;
+      background: none; border: 1.5px dashed var(--border); color: var(--muted);
+      border-radius: 8px; cursor: pointer; font-size: .84rem; transition: border-color .15s, color .15s;
+    }
+    .btn-export:hover { border-color: var(--primary); color: var(--primary); }
+
+    /* ── 備份列 ── */
+    .backup-row {
+      display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;
+    }
+    .btn-backup {
+      flex: 1; padding: 9px 14px; border-radius: 8px; font-size: .84rem;
+      font-weight: 600; cursor: pointer; transition: background .1s, transform .08s;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      white-space: nowrap;
+    }
+    .btn-backup:active { transform: scale(.94); }
+    .btn-bk-export { background: var(--primary-l); color: var(--primary); border: 1.5px solid var(--border); }
+    .btn-bk-export:hover { background: var(--primary); color: #fff; }
+    .btn-bk-import { background: #f0fdf4; color: var(--green); border: 1.5px solid #bbf7d0; }
+    .btn-bk-import:hover { background: var(--green); color: #fff; }
+    .auto-save-badge {
+      font-size: .7rem; color: var(--green); background: var(--green-bg);
+      padding: 3px 8px; border-radius: 12px; display: none; align-items: center; gap: 4px;
+    }
+    .auto-save-badge.show { display: flex; }
+
+    @media (max-width: 480px) {
+      .big-display { font-size: 2rem; }
+      .tf input { width: 58px; font-size: 1.1rem; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="app-title-row">
+  <h1 id="app-h1">🎭 大巨蛋演出管理器</h1>
+  <button class="btn-settings" onclick="toggleSettings()" title="設定">⚙️</button>
+</div>
+<div class="card settings-panel" id="settings-panel" style="display:none">
+  <div class="sec-label">設定</div>
+  <div class="settings-row">
+    <span class="ll">App 名稱</span>
+    <input type="text" id="settingsTitleInput" maxlength="30">
+    <button class="btn-save" onclick="saveTitle()">儲存</button>
+  </div>
+</div>
+
+<!-- ── 建立段落 ── -->
+<div class="card">
+  <div class="sec-label">正在建立的段落</div>
+  <div class="big-display" id="display">00:00:00.000</div>
+  <div class="display-hint">時 : 分 : 秒 . 毫秒　｜　點擊段落時間可直接編輯</div>
+  <div class="seg-list" id="cur-seg-list"></div>
+
+  <div class="time-row">
+    <div class="tf"><label>時</label><input type="number" id="iH" min="0" placeholder="0"></div>
+    <div class="sep">:</div>
+    <div class="tf"><label>分</label><input type="number" id="iM" min="0" max="59" placeholder="0"></div>
+    <div class="sep">:</div>
+    <div class="tf"><label>秒</label><input type="number" id="iS" min="0" max="59" placeholder="0"></div>
+    <div class="sep">.</div>
+    <div class="tf"><label>毫秒 (0–999)</label><input type="number" id="iMs" min="0" max="999" placeholder="0"></div>
+  </div>
+  <div class="btn-row">
+    <button class="btn btn-sub" onclick="addSeg(-1)">－ 減去段落</button>
+    <button class="btn btn-add" onclick="addSeg(1)">＋ 加入段落</button>
+    <button class="btn btn-rst" onclick="clearAll()">全部清除</button>
+  </div>
+  <div class="warn-msg" id="warn"></div>
+
+  <hr class="div">
+
+  <div class="save-row">
+    <input type="text" id="unitName" placeholder="單元名稱（例：佛陀的一生）" maxlength="50">
+    <div class="lim-wrap">
+      <span class="ll">上限</span>
+      <input type="number" class="lim-mini" id="limH" min="0" placeholder="時">
+      <span class="ll">:</span>
+      <input type="number" class="lim-mini" id="limM" min="0" max="59" placeholder="分">
+      <span class="ll">:</span>
+      <input type="number" class="lim-mini" id="limS" min="0" max="59" placeholder="秒">
+    </div>
+    <button class="btn-save" onclick="saveUnit()">儲存單元 ✓</button>
+  </div>
+  <div class="day-pick" style="margin-top:10px">
+    <span class="ll">演出天數</span>
+    <label class="day-chk"><input type="checkbox" id="newday-1">第1天</label>
+    <label class="day-chk"><input type="checkbox" id="newday-2">第2天</label>
+    <label class="day-chk"><input type="checkbox" id="newday-3">第3天</label>
+    <label class="day-chk"><input type="checkbox" id="newday-4">第4天</label>
+  </div>
+  <div class="day-pick" style="margin-top:6px">
+    <span class="ll">主演團隊</span>
+    <select id="newMainTeam" class="team-select">
+      <option value="">無（純影片）</option>
+      <option value="唐團">唐團</option>
+      <option value="優團">優團</option>
+      <option value="入經藏">入經藏</option>
+      <option value="法隨團">法隨團</option>
+    </select>
+  </div>
+  <div class="day-pick" style="margin-top:6px">
+    <span class="ll">支援團隊</span>
+    <label class="day-chk"><input type="checkbox" id="newsup-0">唐團</label>
+    <label class="day-chk"><input type="checkbox" id="newsup-1">優團</label>
+    <label class="day-chk"><input type="checkbox" id="newsup-2">入經藏</label>
+    <label class="day-chk"><input type="checkbox" id="newsup-3">法隨團</label>
+  </div>
+  <div class="save-hint">💡 上限欄位可留空；演出天數可留空（代表每天都演）；儲存後段落自動清空</div>
+</div>
+
+<!-- ── 各單元紀錄 ── -->
+<div class="card">
+  <div class="sec-label">各單元紀錄</div>
+  <div class="day-tabs" id="day-tabs"></div>
+  <div class="day-tabs" id="team-tabs"></div>
+  <label class="day-chk" style="margin-bottom:14px;display:inline-flex">
+    <input type="checkbox" id="hideAllDayChk" onchange="toggleHideAllDay()">隱藏每天都演的單元
+  </label>
+  <div id="unit-list"><div class="empty-hint">尚無儲存的單元</div></div>
+  <div class="grand-row" id="grand-row" style="display:none">
+    <span class="grand-lbl" id="grand-lbl">全部合計</span>
+    <span class="grand-val" id="grand-time"></span>
+  </div>
+  <div id="budget-row" style="display:none"></div>
+  <button class="btn-export" id="export-btn" onclick="exportText()" style="display:none">📋 複製摘要到剪貼簿</button>
+  <div class="backup-row">
+    <button class="btn-backup btn-bk-export" onclick="exportJSON()">💾 匯出備份 (.json)</button>
+    <label class="btn-backup btn-bk-import" style="cursor:pointer;">
+      📂 匯入備份
+      <input type="file" accept=".json" onchange="importJSON(this)" style="display:none">
+    </label>
+    <span class="auto-save-badge" id="save-badge">✓ 已自動儲存</span>
+  </div>
+</div>
+
+<script>
+/* ── 狀態 ── */
+let curSegs = [];        // { ms } 正在建立；ms 可負
+let editingCur = -1;     // curSegs 中正在編輯的 index
+
+let units = [];          // { name, limMs, note, segs:[{ms}], days:[1,2,3,4], mainTeam:'', supportTeams:[] }
+let openUnit = -1;       // 展開的單元 index
+let editingUSeg = null;  // { ui, si }
+let editingUnit = -1; // 正在編輯的單元 index（改名／排序／上限／天數／團隊）
+let activeDayTab = 0;    // 0=全部，1~4=第幾天（篩選顯示用）
+let activeTeamTab = 0;   // 0=全部，1~4=對應 TEAMS 索引（篩選顯示用）
+let hideAllDayUnits = false; // 是否隱藏「每天都演」的單元
+let appTitle = '大巨蛋演出管理器';
+
+const TEAMS = ['唐團','優團','入經藏','法隨團'];
+const STORAGE_KEY = 'gigadome_units_v1';
+const TITLE_KEY = 'gigadome_title_v1';
+
+/* ── localStorage 自動儲存 ── */
+function saveData(){
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(units));
+    const badge = $('save-badge');
+    if(badge){ badge.classList.add('show'); clearTimeout(saveData._t); saveData._t = setTimeout(()=>badge.classList.remove('show'), 2000); }
+  } catch(e){}
+}
+
+function loadData(){
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){ units = JSON.parse(raw); }
+  } catch(e){ units = []; }
+}
+
+/* ── App 標題設定 ── */
+function loadTitle(){
+  try {
+    const t = localStorage.getItem(TITLE_KEY);
+    if(t) appTitle = t;
+  } catch(e){}
+  renderTitle();
+}
+function renderTitle(){
+  $('app-h1').textContent = `🎭 ${appTitle}`;
+  $('page-title').textContent = `🎭 ${appTitle}`;
+}
+function toggleSettings(){
+  const panel = $('settings-panel');
+  const opening = panel.style.display === 'none';
+  panel.style.display = opening ? 'block' : 'none';
+  if(opening) $('settingsTitleInput').value = appTitle;
+}
+function saveTitle(){
+  const v = $('settingsTitleInput').value.trim();
+  if(!v){ warn('⚠️ 名稱不能空白'); return; }
+  appTitle = v;
+  try { localStorage.setItem(TITLE_KEY, appTitle); } catch(e){}
+  renderTitle();
+  $('settings-panel').style.display = 'none';
+  warn('✅ 名稱已更新');
+}
+
+/* ── JSON 匯出備份 ── */
+function exportJSON(){
+  flushAllEditing();
+  const json = JSON.stringify({ version:1, exported: new Date().toISOString(), units }, null, 2);
+  const blob = new Blob([json], {type:'application/json'});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const date = new Date().toISOString().slice(0,10);
+  a.href = url; a.download = `${appTitle}備份_${date}.json`;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+/* ── JSON 匯入備份 ── */
+function importJSON(input){
+  const file = input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      const incoming = Array.isArray(data) ? data : (data.units || []);
+      // 驗證基本結構
+      if(!Array.isArray(incoming)) throw new Error('格式錯誤');
+      if(units.length > 0 && !confirm(`目前已有 ${units.length} 個單元，匯入後將會合併（不覆蓋）。確定繼續嗎？`)){
+        input.value=''; return;
+      }
+      // 合併（避免重名覆蓋）
+      incoming.forEach(u => {
+        if(u && typeof u.name==='string' && Array.isArray(u.segs)){
+          units.push({ name: u.name, limMs: u.limMs||0, note: u.note||'', segs: u.segs, days: u.days||[], mainTeam: u.mainTeam||'', supportTeams: u.supportTeams||[] });
+        }
+      });
+      saveData(); renderUnits();
+      warn('✅ 匯入成功！');
+    } catch(err) {
+      warn('⚠️ 匯入失敗：檔案格式不正確');
+    }
+    input.value='';
+  };
+  reader.readAsText(file);
+}
+
+/* ── 工具 ── */
+const $ = id => document.getElementById(id);
+const nv = id => parseInt($(id).value) || 0;
+function toMs(h,m,s,ms){ return ((h*3600+m*60+s)*1000)+ms; }
+function fmtMs(t){
+  if(t<0)t=0;
+  const ms=t%1000, sec=Math.floor(t/1000), s=sec%60,
+        min=Math.floor(sec/60), m=min%60, h=Math.floor(min/60);
+  return `${p2(h)}:${p2(m)}:${p2(s)}.${p3(ms)}`;
+}
+function splitMs(t){
+  if(t<0)t=0;
+  return { ms:t%1000, s:Math.floor(t/1000)%60, m:Math.floor(t/60000)%60, h:Math.floor(t/3600000) };
+}
+function p2(n){return String(n).padStart(2,'0');}
+function p3(n){return String(n).padStart(3,'0');}
+function esc(t){return (t||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function sumSegs(segs){ return segs.reduce((a,s)=>a+s.ms,0); }
+function warn(msg){
+  $('warn').textContent=msg;
+  clearTimeout(warn._t);
+  warn._t=setTimeout(()=>$('warn').textContent='',3000);
+}
+
+/* ── 輸入區 ── */
+function getMain(){ return toMs(nv('iH'),nv('iM'),nv('iS'),nv('iMs')); }
+function clearMain(){ ['iH','iM','iS','iMs'].forEach(id=>$(id).value=''); $('iH').focus(); }
+
+function addSeg(sign){
+  const d=getMain();
+  if(!d){ warn('⚠️ 請先輸入時間'); return; }
+  curSegs.push({ms:sign*d});
+  editingCur=-1;
+  clearMain();
+  renderCur();
+}
+function clearAll(){ curSegs=[]; editingCur=-1; renderCur(); }
+
+/* ── curSegs 操作 ── */
+function delCur(i){
+  curSegs.splice(i,1);
+  if(editingCur===i) editingCur=-1;
+  else if(editingCur>i) editingCur--;
+  renderCur();
+}
+function moveCur(i,d){
+  const j=i+d;
+  if(j<0||j>=curSegs.length) return;
+  [curSegs[i],curSegs[j]]=[curSegs[j],curSegs[i]];
+  if(editingCur===i) editingCur=j;
+  else if(editingCur===j) editingCur=i;
+  renderCur();
+}
+function startEditCur(i){ editingCur=i; renderCur(); setTimeout(()=>{ const el=$(`ce-h-${i}`); if(el)el.focus(); },0); }
+function confirmEditCur(i){
+  const {h,m,s,ms}=getEditVals('ce',i);
+  const sign=curSegs[i].ms<0?-1:1;
+  curSegs[i].ms=sign*toMs(h,m,s,ms);
+  editingCur=-1; renderCur();
+}
+function cancelEditCur(){ editingCur=-1; renderCur(); }
+
+/* ── curSegs 渲染 ── */
+function renderCur(){
+  const total=Math.max(0,sumSegs(curSegs));
+  $('display').textContent=fmtMs(total);
+  const el=$('cur-seg-list');
+  if(!curSegs.length){ el.innerHTML=''; return; }
+
+  let h='';
+  curSegs.forEach((seg,i)=>{
+    const neg=seg.ms<0;
+    const abs=Math.abs(seg.ms);
+    const pre=i===0?(neg?'－':''):(neg?'－':'＋');
+    const isE=editingCur===i;
+    if(isE){
+      const v=splitMs(abs);
+      h+=`<div class="seg-row editing">
+        <span class="seg-prefix">${esc(pre)}</span>
+        <div class="seg-edit-row">
+          <input type="number" id="ce-h-${i}"  value="${v.h}"  min="0" placeholder="0">
+          <span class="seg-edit-sep">:</span>
+          <input type="number" id="ce-m-${i}"  value="${v.m}"  min="0" max="59" placeholder="0">
+          <span class="seg-edit-sep">:</span>
+          <input type="number" id="ce-s-${i}"  value="${v.s}"  min="0" max="59" placeholder="0">
+          <span class="seg-edit-sep">.</span>
+          <input type="number" id="ce-ms-${i}" value="${v.ms}" min="0" max="999" placeholder="0">
+        </div>
+        <div class="seg-actions">
+          <button class="btn-ok" onclick="confirmEditCur(${i})">確認</button>
+          <button class="btn-cx" onclick="cancelEditCur()">取消</button>
+        </div>
+      </div>`;
+    } else {
+      h+=`<div class="seg-row">
+        <span class="seg-prefix">${esc(pre)}</span>
+        <span class="seg-time${neg?' neg':''}" onclick="startEditCur(${i})" title="點擊編輯">${fmtMs(abs)}</span>
+        <div class="seg-actions">
+          <button class="bi" onclick="moveCur(${i},-1)" ${i===0?'disabled':''} title="往前移">↑</button>
+          <button class="bi" onclick="moveCur(${i}, 1)" ${i===curSegs.length-1?'disabled':''} title="往後移">↓</button>
+          <button class="bi d" onclick="delCur(${i})" title="刪除">✕</button>
+        </div>
+      </div>`;
+    }
+  });
+
+  const tot=sumSegs(curSegs);
+  h+=`<div class="seg-total-row">
+    <span class="seg-total-eq">＝</span>
+    <span class="seg-total-val">${fmtMs(Math.max(0,tot))}</span>
+    ${tot<0?'<span style="font-size:.75rem;color:var(--red);margin-left:8px;">（負數，儲存為 0）</span>':''}
+  </div>`;
+  el.innerHTML=h;
+
+  // keyboard enter for editing inputs
+  if(editingCur>=0){
+    ['h','m','s','ms'].forEach(p=>{
+      const inp=$(`ce-${p}-${editingCur}`);
+      if(inp) inp.addEventListener('keydown',e=>{ if(e.key==='Enter') confirmEditCur(editingCur); });
+    });
+  }
+}
+
+/* ── 儲存單元 ── */
+function saveUnit(){
+  if(!curSegs.length){ warn('⚠️ 請先加入至少一個段落'); return; }
+  const name=$('unitName').value.trim()||`單元 ${units.length+1}`;
+  const limMs=toMs(nv('limH'),nv('limM'),nv('limS'),0);
+  const days=[1,2,3,4].filter(d=>$(`newday-${d}`)?.checked);
+  const mainTeam=$('newMainTeam').value;
+  const supportTeams=TEAMS.filter((t,i)=>$(`newsup-${i}`)?.checked);
+  units.push({name, limMs, note:'', segs:[...curSegs], days, mainTeam, supportTeams});
+  $('unitName').value='';
+  ['limH','limM','limS'].forEach(id=>$(id).value='');
+  [1,2,3,4].forEach(d=>{ const el=$(`newday-${d}`); if(el) el.checked=false; });
+  $('newMainTeam').value='';
+  TEAMS.forEach((t,i)=>{ const el=$(`newsup-${i}`); if(el) el.checked=false; });
+  curSegs=[]; editingCur=-1;
+  renderCur(); saveData(); renderUnits();
+}
+
+/* ── 單元操作 ── */
+function delUnit(i){
+  units.splice(i,1);
+  if(openUnit===i) openUnit=-1; else if(openUnit>i) openUnit--;
+  if(editingUnit===i) editingUnit=-1; else if(editingUnit>i) editingUnit--;
+  editingUSeg=null;
+  saveData(); renderUnits();
+}
+
+function toggleUnit(i){
+  flushNote();
+  openUnit=(openUnit===i)?-1:i;
+  editingUSeg=null;
+  renderUnits();
+}
+
+function delUSeg(ui,si){
+  units[ui].segs.splice(si,1);
+  if(editingUSeg&&editingUSeg.ui===ui&&editingUSeg.si===si) editingUSeg=null;
+  saveData(); renderUnits();
+}
+
+function moveUSeg(ui,si,d){
+  const segs=units[ui].segs, j=si+d;
+  if(j<0||j>=segs.length) return;
+  [segs[si],segs[j]]=[segs[j],segs[si]];
+  saveData(); renderUnits();
+}
+
+function startEditUSeg(ui,si){
+  editingUSeg={ui,si};
+  renderUnits();
+  setTimeout(()=>{ const el=$(`ue-h-${ui}-${si}`); if(el)el.focus(); },0);
+}
+
+function confirmEditUSeg(ui,si){
+  const {h,m,s,ms}=getEditVals('ue',`${ui}-${si}`);
+  const sign=units[ui].segs[si].ms<0?-1:1;
+  units[ui].segs[si].ms=sign*toMs(h,m,s,ms);
+  editingUSeg=null; saveData(); renderUnits();
+}
+
+function cancelEditUSeg(){ editingUSeg=null; renderUnits(); }
+
+function addSegToUnit(ui){
+  const h=nv(`da-h-${ui}`), m=nv(`da-m-${ui}`), s=nv(`da-s-${ui}`), ms=nv(`da-ms-${ui}`);
+  const d=toMs(h,m,s,ms);
+  if(!d) return;
+  units[ui].segs.push({ms:d});
+  saveData(); renderUnits();
+}
+
+function saveNote(ui,el){ units[ui].note=el.innerText.trim(); saveData(); }
+
+/* ── 單元編輯模式 ── */
+function startEditUnit(ui){
+  editingUnit=ui;
+  renderUnits();
+  setTimeout(()=>{ const el=$(`ue-name-${ui}`); if(el){el.focus();el.select();} },0);
+}
+
+function flushEditUnit(ui){
+  // 把目前輸入框的值存回 units[ui]（moveUnit 前呼叫，避免移動後資料消失）
+  const nameEl=$(`ue-name-${ui}`);
+  if(nameEl){ const v=nameEl.value.trim(); if(v) units[ui].name=v; }
+  const lh=parseInt($(`ue-lh-${ui}`)?.value)||0;
+  const lm=parseInt($(`ue-lm-${ui}`)?.value)||0;
+  const ls=parseInt($(`ue-ls-${ui}`)?.value)||0;
+  units[ui].limMs=toMs(lh,lm,ls,0);
+  units[ui].days=[1,2,3,4].filter(d=>$(`ue-day-${d}-${ui}`)?.checked);
+  const mainSel=$(`ue-main-${ui}`);
+  if(mainSel) units[ui].mainTeam=mainSel.value;
+  units[ui].supportTeams=TEAMS.filter((t,i)=>$(`ue-sup-${i}-${ui}`)?.checked);
+}
+
+function confirmEditUnit(ui){
+  flushEditUnit(ui);
+  editingUnit=-1; saveData(); renderUnits();
+}
+
+/* ── 單元排序（只在編輯模式下可用）── */
+function moveUnit(i,dir){
+  if(editingUnit===i) flushEditUnit(i); // 先存目前輸入
+  const j=i+dir;
+  if(j<0||j>=units.length) return;
+  [units[i],units[j]]=[units[j],units[i]];
+  if(openUnit===i) openUnit=j; else if(openUnit===j) openUnit=i;
+  if(editingUnit===i) editingUnit=j; else if(editingUnit===j) editingUnit=i;
+  saveData(); renderUnits();
+  setTimeout(()=>{ const el=$(`ue-name-${editingUnit}`); if(el)el.focus(); },0);
+}
+
+function clearUnitLimit(ui){
+  ['ue-lh','ue-lm','ue-ls'].forEach(p=>{ const el=$(`${p}-${ui}`); if(el) el.value=''; });
+}
+
+/* ── 天數分頁 ── */
+function unitMatchesTab(u, tab){
+  if(tab===0) return true;
+  return !u.days || !u.days.length || u.days.includes(tab);
+}
+function daysLabel(days){
+  if(!days || !days.length) return '';
+  return `<span style="font-size:.72rem;color:var(--muted);">📅${days.map(d=>`第${d}天`).join('、')}</span>`;
+}
+function renderDayTabs(){
+  const labels=['全部','第1天','第2天','第3天','第4天'];
+  $('day-tabs').innerHTML = labels.map((l,i)=>
+    `<button class="day-tab${activeDayTab===i?' active':''}" onclick="setDayTab(${i})">${l}</button>`
+  ).join('');
+}
+function setDayTab(tab){ activeDayTab=tab; renderUnits(); }
+
+/* ── 團隊分頁 ── */
+function unitMatchesTeam(u, tab){
+  if(tab===0) return true;
+  const team=TEAMS[tab-1];
+  return u.mainTeam===team || (u.supportTeams||[]).includes(team);
+}
+function teamLabel(u){
+  const parts=[];
+  if(u.mainTeam) parts.push(u.mainTeam);
+  if(u.supportTeams&&u.supportTeams.length) parts.push(`支援${u.supportTeams.join('、')}`);
+  if(!parts.length) return '';
+  return `<span style="font-size:.72rem;color:var(--muted);">🎭${parts.join(' ')}</span>`;
+}
+function renderTeamTabs(){
+  const labels=['全部團隊', ...TEAMS];
+  $('team-tabs').innerHTML = labels.map((l,i)=>
+    `<button class="day-tab${activeTeamTab===i?' active':''}" onclick="setTeamTab(${i})">${l}</button>`
+  ).join('');
+}
+function setTeamTab(tab){ activeTeamTab=tab; renderUnits(); }
+
+/* ── 隱藏每天都演的單元 ── */
+function isEveryDayUnit(u){
+  return !u.days || !u.days.length || u.days.length>=4;
+}
+function toggleHideAllDay(){
+  hideAllDayUnits=$('hideAllDayChk').checked;
+  renderUnits();
+}
+
+/* ── 綜合篩選（天數 × 團隊 × 隱藏每天都演）── */
+function unitVisible(u){
+  if(!unitMatchesTab(u, activeDayTab)) return false;
+  if(!unitMatchesTeam(u, activeTeamTab)) return false;
+  if(hideAllDayUnits && isEveryDayUnit(u)) return false;
+  return true;
+}
+function filterLabel(){
+  const parts=[];
+  if(activeDayTab>0) parts.push(`第${activeDayTab}天`);
+  if(activeTeamTab>0) parts.push(TEAMS[activeTeamTab-1]);
+  return parts.length ? parts.join('・')+'　' : '';
+}
+
+/* ── 緊湊時間格式（只顯示有意義的單位）── */
+function fmtShort(ms){
+  if(ms<=0) return '0秒';
+  const totalSec=Math.floor(ms/1000), remMs=ms%1000;
+  const s=totalSec%60, m=Math.floor(totalSec/60)%60, h=Math.floor(totalSec/3600);
+  if(h>0) return `${h}時${m}分${s}秒`;
+  if(m>0) return s>0 ? `${m}分${s}秒` : `${m}分`;
+  if(remMs>0){
+    const dec=String(remMs).padStart(3,'0').replace(/0+$/,'');
+    return `${s}.${dec}秒`;
+  }
+  return `${s}秒`;
+}
+function flushNote(){
+  if(openUnit<0||openUnit>=units.length) return;
+  const el=$(`note-${openUnit}`);
+  if(el) units[openUnit].note=el.innerText.trim();
+}
+function flushAllEditing(){
+  flushNote();
+  if(editingUnit>=0&&editingUnit<units.length) flushEditUnit(editingUnit);
+}
+
+function getEditVals(prefix, suffix){
+  return {
+    h:  parseInt($(`${prefix}-h-${suffix}`).value)||0,
+    m:  parseInt($(`${prefix}-m-${suffix}`).value)||0,
+    s:  parseInt($(`${prefix}-s-${suffix}`).value)||0,
+    ms: parseInt($(`${prefix}-ms-${suffix}`).value)||0,
+  };
+}
+
+/* ── 單元列表渲染 ── */
+function renderUnits(){
+  const list=$('unit-list'), grandRow=$('grand-row'), expBtn=$('export-btn'), budgetEl=$('budget-row');
+  if(!units.length){
+    $('day-tabs').innerHTML=''; $('team-tabs').innerHTML='';
+    list.innerHTML='<div class="empty-hint">尚無儲存的單元</div>';
+    grandRow.style.display='none'; expBtn.style.display='none'; budgetEl.style.display='none';
+    return;
+  }
+  renderDayTabs(); renderTeamTabs();
+
+  let grand=0, limTotal=0, actualWithLim=0, limCount=0, html='', shown=0;
+  units.forEach((u,ui)=>{
+    if(!unitVisible(u)) return;
+    shown++;
+    const total=Math.max(0,sumSegs(u.segs));
+    grand+=total;
+    const hasLim=u.limMs>0, over=hasLim&&total>u.limMs, isOpen=openUnit===ui;
+    if(hasLim){ limTotal+=u.limMs; actualWithLim+=total; limCount++; }
+
+    let badge='';
+    if(hasLim){
+      const diff=Math.abs(u.limMs-total);
+      badge=over
+        ? `<span class="badge over">超時 ${fmtShort(diff)}</span>`
+        : `<span class="badge ok">剩餘 ${fmtShort(diff)}</span>`;
+    }
+    const limNote=hasLim?`<span style="font-size:.72rem;color:var(--muted);">上限 ${fmtMs(u.limMs)}</span>`:'';
+    const isEditing=editingUnit===ui;
+    const {h:lh,m:lm,s:ls}=splitMs(u.limMs);
+    const dTag=daysLabel(u.days);
+    const tTag=teamLabel(u);
+
+    const headerHtml = isEditing
+      ? `<div class="unit-header">
+           <span class="expand-icon ${isOpen?'open':''}">▶</span>
+           <input id="ue-name-${ui}" class="unit-name-edit" value="${esc(u.name)}" maxlength="50"
+                  onclick="event.stopPropagation()"
+                  onkeydown="if(event.key==='Enter')confirmEditUnit(${ui})">
+           <button class="bi" onclick="event.stopPropagation();moveUnit(${ui},-1)" ${ui===0?'disabled':''} title="往上移">↑</button>
+           <button class="bi" onclick="event.stopPropagation();moveUnit(${ui}, 1)" ${ui===units.length-1?'disabled':''} title="往下移">↓</button>
+           <span class="unit-total">${fmtMs(total)}</span>
+           ${badge}
+           <button class="btn-done-u" onclick="event.stopPropagation();confirmEditUnit(${ui})">完成</button>
+           <button class="btn-del-u" onclick="event.stopPropagation();delUnit(${ui})">刪除</button>
+         </div>
+         <div class="unit-edit-panel">
+           <span class="ue-lbl">時間上限</span>
+           <input type="number" id="ue-lh-${ui}" class="ue-mini" min="0" value="${lh||''}" placeholder="時">
+           <span class="ue-lbl">時</span>
+           <input type="number" id="ue-lm-${ui}" class="ue-mini" min="0" max="59" value="${lm||''}" placeholder="分">
+           <span class="ue-lbl">分</span>
+           <input type="number" id="ue-ls-${ui}" class="ue-mini" min="0" max="59" value="${ls||''}" placeholder="秒">
+           <span class="ue-lbl">秒</span>
+           <button class="btn-clear-lim" onclick="clearUnitLimit(${ui})">清除上限</button>
+         </div>
+         <div class="unit-edit-panel">
+           <span class="ue-lbl">演出天數</span>
+           <label class="day-chk"><input type="checkbox" id="ue-day-1-${ui}" ${u.days&&u.days.includes(1)?'checked':''}>第1天</label>
+           <label class="day-chk"><input type="checkbox" id="ue-day-2-${ui}" ${u.days&&u.days.includes(2)?'checked':''}>第2天</label>
+           <label class="day-chk"><input type="checkbox" id="ue-day-3-${ui}" ${u.days&&u.days.includes(3)?'checked':''}>第3天</label>
+           <label class="day-chk"><input type="checkbox" id="ue-day-4-${ui}" ${u.days&&u.days.includes(4)?'checked':''}>第4天</label>
+         </div>
+         <div class="unit-edit-panel">
+           <span class="ue-lbl">主演團隊</span>
+           <select id="ue-main-${ui}" class="team-select" onclick="event.stopPropagation()">
+             <option value="" ${!u.mainTeam?'selected':''}>無（純影片）</option>
+             <option value="唐團" ${u.mainTeam==='唐團'?'selected':''}>唐團</option>
+             <option value="優團" ${u.mainTeam==='優團'?'selected':''}>優團</option>
+             <option value="入經藏" ${u.mainTeam==='入經藏'?'selected':''}>入經藏</option>
+             <option value="法隨團" ${u.mainTeam==='法隨團'?'selected':''}>法隨團</option>
+           </select>
+         </div>
+         <div class="unit-edit-panel">
+           <span class="ue-lbl">支援團隊</span>
+           <label class="day-chk"><input type="checkbox" id="ue-sup-0-${ui}" ${u.supportTeams&&u.supportTeams.includes('唐團')?'checked':''}>唐團</label>
+           <label class="day-chk"><input type="checkbox" id="ue-sup-1-${ui}" ${u.supportTeams&&u.supportTeams.includes('優團')?'checked':''}>優團</label>
+           <label class="day-chk"><input type="checkbox" id="ue-sup-2-${ui}" ${u.supportTeams&&u.supportTeams.includes('入經藏')?'checked':''}>入經藏</label>
+           <label class="day-chk"><input type="checkbox" id="ue-sup-3-${ui}" ${u.supportTeams&&u.supportTeams.includes('法隨團')?'checked':''}>法隨團</label>
+         </div>`
+      : `<div class="unit-header" onclick="toggleUnit(${ui})">
+           <span class="expand-icon ${isOpen?'open':''}">▶</span>
+           <span class="unit-name">${esc(u.name)}</span>
+           ${dTag}
+           ${tTag}
+           ${limNote}
+           <span class="unit-total">${fmtMs(total)}</span>
+           ${badge}
+           <button class="btn-edit-u" onclick="event.stopPropagation();startEditUnit(${ui})">編輯</button>
+           <button class="btn-del-u"  onclick="event.stopPropagation();delUnit(${ui})">刪除</button>
+         </div>`;
+
+    html+=`<div class="unit-item">
+      ${headerHtml}
+      ${isOpen?renderDetail(u,ui):''}
+    </div>`;
+  });
+
+  const fl=filterLabel();
+  if(!shown){
+    list.innerHTML=`<div class="empty-hint">${fl?`沒有符合「${fl.trim()}」的單元`:'目前篩選條件下沒有單元'}</div>`;
+    grandRow.style.display='none'; expBtn.style.display='none'; budgetEl.style.display='none';
+    return;
+  }
+
+  list.innerHTML=html;
+  $('grand-lbl').textContent = fl ? `${fl}合計` : '全部合計';
+  $('grand-time').textContent=fmtMs(grand);
+  grandRow.style.display='flex'; expBtn.style.display='block';
+
+  // 整體餘裕列
+  if(limCount>0){
+    const net=limTotal-actualWithLim;
+    const surplus=net>=0;
+    budgetEl.className=`budget-row ${surplus?'surplus':'deficit'}`;
+    budgetEl.innerHTML=`
+      <span class="budget-lbl">${fl}整體餘裕（${limCount} 個有上限的單元）</span>
+      <span class="budget-val" style="color:var(${surplus?'--green':'--red'})">
+        ${surplus?'可挪用 +':'超支 -'}${fmtShort(Math.abs(net))}
+      </span>`;
+    budgetEl.style.display='flex';
+  } else {
+    budgetEl.style.display='none';
+  }
+
+  // 編輯模式：上限輸入框 Enter 鍵
+  if(editingUnit>=0){
+    ['ue-lh','ue-lm','ue-ls'].forEach(p=>{
+      const inp=$(`${p}-${editingUnit}`);
+      if(inp) inp.addEventListener('keydown',e=>{ if(e.key==='Enter') confirmEditUnit(editingUnit); });
+    });
+  }
+
+  // attach listeners after render
+  if(openUnit>=0){
+    const ui=openUnit, u=units[ui];
+    const noteEl=$(`note-${ui}`);
+    if(noteEl) noteEl.addEventListener('blur',()=>saveNote(ui,noteEl));
+
+    if(editingUSeg&&editingUSeg.ui===ui){
+      const si=editingUSeg.si;
+      ['h','m','s','ms'].forEach(p=>{
+        const inp=$(`ue-${p}-${ui}-${si}`);
+        if(inp) inp.addEventListener('keydown',e=>{ if(e.key==='Enter') confirmEditUSeg(ui,si); });
+      });
+    }
+    ['h','m','s','ms'].forEach(p=>{
+      const inp=$(`da-${p}-${ui}`);
+      if(inp) inp.addEventListener('keydown',e=>{ if(e.key==='Enter') addSegToUnit(ui); });
+    });
+  }
+}
+
+function renderDetail(u, ui){
+  const segs=u.segs;
+  let segH='';
+  segs.forEach((seg,si)=>{
+    const neg=seg.ms<0, abs=Math.abs(seg.ms);
+    const pre=si===0?(neg?'－':''):(neg?'－':'＋');
+    const isE=editingUSeg&&editingUSeg.ui===ui&&editingUSeg.si===si;
+    if(isE){
+      const v=splitMs(abs);
+      segH+=`<div class="seg-row editing">
+        <span class="seg-prefix">${esc(pre)}</span>
+        <div class="seg-edit-row">
+          <input type="number" id="ue-h-${ui}-${si}"  value="${v.h}"  min="0" placeholder="0">
+          <span class="seg-edit-sep">:</span>
+          <input type="number" id="ue-m-${ui}-${si}"  value="${v.m}"  min="0" max="59" placeholder="0">
+          <span class="seg-edit-sep">:</span>
+          <input type="number" id="ue-s-${ui}-${si}"  value="${v.s}"  min="0" max="59" placeholder="0">
+          <span class="seg-edit-sep">.</span>
+          <input type="number" id="ue-ms-${ui}-${si}" value="${v.ms}" min="0" max="999" placeholder="0">
+        </div>
+        <div class="seg-actions">
+          <button class="btn-ok" onclick="confirmEditUSeg(${ui},${si})">確認</button>
+          <button class="btn-cx" onclick="cancelEditUSeg()">取消</button>
+        </div>
+      </div>`;
+    } else {
+      segH+=`<div class="seg-row">
+        <span class="seg-prefix">${esc(pre)}</span>
+        <span class="seg-time${neg?' neg':''}" onclick="startEditUSeg(${ui},${si})" title="點擊編輯">${fmtMs(abs)}</span>
+        <div class="seg-actions">
+          <button class="bi" onclick="moveUSeg(${ui},${si},-1)" ${si===0?'disabled':''} title="往前移">↑</button>
+          <button class="bi" onclick="moveUSeg(${ui},${si}, 1)" ${si===segs.length-1?'disabled':''} title="往後移">↓</button>
+          <button class="bi d" onclick="delUSeg(${ui},${si})" title="刪除">✕</button>
+        </div>
+      </div>`;
+    }
+  });
+
+  const total=sumSegs(segs);
+  segH+=`<div class="seg-total-row">
+    <span class="seg-total-eq">＝</span>
+    <span class="seg-total-val">${fmtMs(Math.max(0,total))}</span>
+  </div>`;
+
+  return `<div class="unit-detail">
+    <div class="seg-list">${segH}</div>
+    <div class="detail-add">
+      <span class="detail-add-lbl">新增段落 →</span>
+      <div class="mtf"><label>時</label><input type="number" id="da-h-${ui}"  min="0" placeholder="0"></div>
+      <span class="msep">:</span>
+      <div class="mtf"><label>分</label><input type="number" id="da-m-${ui}"  min="0" max="59" placeholder="0"></div>
+      <span class="msep">:</span>
+      <div class="mtf"><label>秒</label><input type="number" id="da-s-${ui}"  min="0" max="59" placeholder="0"></div>
+      <span class="msep">.</span>
+      <div class="mtf"><label>毫秒</label><input type="number" id="da-ms-${ui}" min="0" max="999" placeholder="0"></div>
+      <button class="btn-dadd" onclick="addSegToUnit(${ui})">加入 ＋</button>
+    </div>
+    <div class="note-row">
+      <span class="note-lbl">備注</span>
+      <div class="unit-note" id="note-${ui}" contenteditable="true"
+           data-placeholder="點此輸入備注…"
+           onblur="saveNote(${ui},this)">${esc(u.note)}</div>
+    </div>
+  </div>`;
+}
+
+/* ── 匯出 ── */
+function exportText(){
+  flushAllEditing();
+  const list=units.filter(unitVisible);
+  if(!list.length) return;
+  let grand=0, limTotal=0, actualWithLim=0, limCount=0;
+  list.forEach(u=>{
+    const total=Math.max(0,sumSegs(u.segs));
+    grand+=total;
+    if(u.limMs>0){ limTotal+=u.limMs; actualWithLim+=total; limCount++; }
+  });
+  const fl=filterLabel();
+  const lines=[`【${appTitle} — 單元摘要】${fl?`（${fl.trim()}）`:''}`,''];
+  lines.push(`⏳ 全部合計：${fmtMs(grand)}`);
+  if(limCount>0){
+    const net=limTotal-actualWithLim;
+    lines.push(net>=0?`✅ 剩餘 ${fmtMs(net)}`:`❌ 超時 ${fmtMs(Math.abs(net))}`);
+  }
+  lines.push('','各單元細項','');
+  list.forEach(u=>{
+    const total=Math.max(0,sumSegs(u.segs));
+    const hasLim=u.limMs>0;
+    const diff=hasLim?fmtMs(Math.abs(u.limMs-total)):'';
+    const status=hasLim?(total>u.limMs?`❌ 超時 ${diff}`:`✅ 剩餘 ${diff}`):'';
+    const limStr=hasLim?` (上限 ${fmtMs(u.limMs)})`:'';
+    lines.push(`🙏 ${u.name}`);
+    const team=teamLabel(u).replace(/<[^>]+>/g,'');
+    if(team) lines.push(team);
+    lines.push(`⏳ 時間：${fmtMs(total)}${limStr}`);
+    if(status) lines.push(status);
+    if(u.segs.length>1){
+      const str=u.segs.map((s,j)=>(j===0&&s.ms>=0?'':s.ms<0?'－':'＋')+fmtMs(Math.abs(s.ms))).join(' ');
+      lines.push(`段落：${str}`);
+    }
+    if(u.note) lines.push(`備注：${u.note}`);
+    lines.push('');
+  });
+  const text=lines.join('\n').trimEnd();
+  navigator.clipboard.writeText(text)
+    .then(()=>warn('✅ 摘要已複製到剪貼簿！'))
+    .catch(()=>prompt('請手動複製：',text));
+}
+
+/* ── Enter 快捷鍵 ── */
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&['iH','iM','iS','iMs'].includes(e.target.id)) addSeg(1);
+});
+
+/* ── 初始化：從 localStorage 讀取 ── */
+loadTitle(); loadData(); renderCur(); renderUnits();
+</script>
+</body>
+</html>
