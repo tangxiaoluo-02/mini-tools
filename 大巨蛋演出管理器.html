@@ -441,7 +441,7 @@
       <option value="唐團">唐團</option>
       <option value="優團">優團</option>
       <option value="入經藏">入經藏</option>
-      <option value="法隨團">法隨團</option>
+      <option value="法髓團">法髓團</option>
     </select>
   </div>
   <div class="day-pick" style="margin-top:6px">
@@ -449,7 +449,7 @@
     <label class="day-chk"><input type="checkbox" id="newsup-0">唐團</label>
     <label class="day-chk"><input type="checkbox" id="newsup-1">優團</label>
     <label class="day-chk"><input type="checkbox" id="newsup-2">入經藏</label>
-    <label class="day-chk"><input type="checkbox" id="newsup-3">法隨團</label>
+    <label class="day-chk"><input type="checkbox" id="newsup-3">法髓團</label>
   </div>
   <div class="save-hint">💡 上限欄位可留空；演出天數可留空（代表每天都演）；儲存後段落自動清空</div>
 </div>
@@ -493,7 +493,7 @@ let activeTeamTab = 0;   // 0=全部，1~4=對應 TEAMS 索引（篩選顯示用
 let hideAllDayUnits = false; // 是否隱藏「每天都演」的單元
 let appTitle = '大巨蛋演出管理器';
 
-const TEAMS = ['唐團','優團','入經藏','法隨團'];
+const TEAMS = ['唐團','優團','入經藏','法髓團'];
 const STORAGE_KEY = 'gigadome_units_v1';
 const TITLE_KEY = 'gigadome_title_v1';
 
@@ -506,10 +506,108 @@ function saveData(){
   } catch(e){}
 }
 
+/* ── 預設節目單（任何人第一次開啟都會看到這份） ── */
+/* [分類, 名稱, 上限ms, 演出天數(空陣列=每天都演), 主演團隊, 支援團隊] */
+const DEFAULT_UNITS = [
+  ['01序場','序場',0,[],'',[]],
+  ['01序場','轉場',30000,[],'唐團',[]],
+  ['01序場','佛陀的一生',330000,[],'唐團',[]],
+  ['01序場','悟道',0,[],'優團',[]],
+  ['01序場','靈鷲山上',0,[],'入經藏',[]],
+  ['01序場','鳩摩羅什',90000,[],'唐團',[]],
+  ['01序場','玄奘',0,[],'優團',[]],
+  ['01序場','鑑真',90000,[],'唐團',[]],
+  ['01序場','靈鷲山上',0,[],'入經藏',[]],
+  ['01序場','開經偈',0,[],'入經藏',[]],
+
+  ['02慈善','莫忘那一念',180000,[],'唐團',[]],
+  ['02慈善','靜思家風',120000,[],'唐團',[]],
+  ['02慈善','一灘血',0,[],'優團',[]],
+  ['02慈善','三位修女',30000,[],'唐團',[]],
+  ['02慈善','三十位主婦連署',0,[],'入經藏',[]],
+  ['02慈善','點一盞燈',0,[],'入經藏',[]],
+  ['02慈善','竹筒歲月',0,[],'法髓團',['唐團']],
+  ['02慈善','林曾老太太',0,[2,4],'法髓團',['唐團']],
+  ['02慈善','盧丹桂',0,[1,3],'法髓團',['唐團']],
+  ['02慈善','大南村大火',0,[1,3],'法髓團',['唐團']],
+  ['02慈善','李阿拋',0,[],'法髓團',[]],
+  ['02慈善','娜拉颱風',0,[2,4],'法髓團',['唐團']],
+  ['02慈善','一粒米中藏日月',0,[1,3],'法髓團',['唐團']],
+  ['02慈善','冬季圍爐',0,[],'法髓團',[]],
+  ['02慈善','粒粒皆清楚',0,[2,4],'法髓團',['唐團']],
+
+  ['03醫療','老鼠咬腳',95000,[],'唐團',[]],
+  ['03醫療','李烏肉',0,[],'法髓團',[]],
+  ['03醫療','義診多起個案',0,[],'優團',[]],
+  ['03醫療','地藏經啟航',35000,[],'法髓團',['唐團']],
+  ['03醫療','掘井人的精神',0,[],'法髓團',[]],
+  ['03醫療','尋覓人才－拉繩子',0,[],'優團',[]],
+  ['03醫療','羅倫佐的油',0,[],'優團',[]],
+  ['03醫療','八仙塵爆',300000,[1],'唐團',[]],
+  ['03醫療','大林慈院',0,[],'法髓團',[]],
+  ['03醫療','聽見幸福的樂章',0,[],'優團',[]],
+  ['03醫療','來者不鋸',0,[],'優團',[]],
+  ['03醫療','慈濟醫療網',0,[],'入經藏',[]],
+  ['03醫療','關山慈院',0,[],'法髓團',[]],
+  ['03醫療','大埔無醫鄉',240000,[3],'唐團',[]],
+  ['03醫療','江永旭',240000,[4],'唐團',['法髓團']],
+  ['03醫療','新冠病毒',0,[],'優團',[]],
+  ['03醫療','無人機送藥',180000,[2],'法髓團',['唐團']],
+  ['03醫療','慈濟醫療網',0,[],'入經藏',[]],
+  ['03醫療','骨髓捐贈',0,[],'優團',[]],
+
+  ['04教育','開場',55000,[],'入經藏',[]],
+  ['04教育','原住民少女',60000,[],'唐團',[]],
+  ['04教育','護專發明得獎',0,[],'優團',[]],
+  ['04教育','護專師生穿制服',0,[],'法髓團',[]],
+  ['04教育','大體老師',0,[],'法髓團',[]],
+  ['04教育','醫學生宣誓',60000,[],'唐團',[]],
+  ['04教育','醫學生馳援',70000,[],'唐團',[]],
+  ['04教育','徐永祥主任',300000,[1,2],'唐團',[]],
+  ['04教育','慈濟中小學',0,[],'法髓團',[]],
+  ['04教育','慈濟教育志業完全化',0,[],'入經藏',[]],
+  ['04教育','教聯會與靜思語',0,[],'優團',[]],
+  ['04教育','教聯會大事紀',0,[],'入經藏',[]],
+
+  ['05人文','開場',0,[],'入經藏',[]],
+  ['05人文','慈濟月刊',0,[],'',[]],
+  ['05人文','廣播節目',0,[],'法髓團',[]],
+  ['05人文','吳尊賢公益講座',120000,[],'唐團',[]],
+  ['05人文','幸福人生講座',0,[],'法髓團',[]],
+  ['05人文','大愛電視台',0,[],'優團',[]],
+
+  ['06功德','貧婆供養',0,[],'優團',[]],
+  ['06功德','後山土地公',0,[],'法髓團',[]],
+  ['06功德','樂生療養院',0,[],'法髓團',[]],
+  ['06功德','陳才爺爺',0,[],'法髓團',[]],
+  ['06功德','大捨堂陳麗罔',0,[],'法髓團',[]],
+  ['06功德','古早味爆米香',0,[],'法髓團',[]],
+  ['06功德','榮董實業家',0,[],'法髓團',[]],
+  ['06功德','緬甸米撲滿',110000,[1],'法髓團',['唐團']],
+  ['06功德','敘利亞',0,[],'優團',[]],
+  ['06功德','約旦',142000,[3],'唐團',[]],
+  ['06功德','泰北扶困',0,[],'優團',[]],
+  ['06功德','臺灣救災集錦',0,[],'優團',[]],
+  ['06功德','翻轉南非',240000,[2],'唐團',[]],
+  ['06功德','莫三比克',240000,[1],'唐團',[]],
+  ['06功德','辛巴威',360000,[4],'唐團',[]],
+  ['06功德','莫拉克風災',240000,[3],'唐團',[]],
+  ['06功德','海燕風災',0,[],'優團',[]],
+  ['06功德','印尼紅溪河',0,[],'優團',[]],
+  ['06功德','黑區變亮區',0,[],'優團',[]],
+  ['06功德','921',420000,[1],'唐團',[]],
+  ['06功德','重返佛國',480000,[4],'優團',[]],
+  ['06功德','慈濟小行星',0,[],'',[]],
+  ['06功德','祈禱',0,[],'',[]],
+].map(([category,name,limMs,days,mainTeam,supportTeams])=>(
+  { name, limMs, note:'', segs:[], days, mainTeam, supportTeams, category }
+));
+
 function loadData(){
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if(raw){ units = JSON.parse(raw); }
+    else { units = DEFAULT_UNITS.map(u=>({...u, segs:[...u.segs], days:[...u.days], supportTeams:[...u.supportTeams]})); saveData(); }
   } catch(e){ units = []; }
 }
 
@@ -570,7 +668,7 @@ function importJSON(input){
       // 合併（避免重名覆蓋）
       incoming.forEach(u => {
         if(u && typeof u.name==='string' && Array.isArray(u.segs)){
-          units.push({ name: u.name, limMs: u.limMs||0, note: u.note||'', segs: u.segs, days: u.days||[], mainTeam: u.mainTeam||'', supportTeams: u.supportTeams||[] });
+          units.push({ name: u.name, limMs: u.limMs||0, note: u.note||'', segs: u.segs, days: u.days||[], mainTeam: u.mainTeam||'', supportTeams: u.supportTeams||[], category: u.category||'' });
         }
       });
       saveData(); renderUnits();
@@ -983,7 +1081,7 @@ function renderUnits(){
              <option value="唐團" ${u.mainTeam==='唐團'?'selected':''}>唐團</option>
              <option value="優團" ${u.mainTeam==='優團'?'selected':''}>優團</option>
              <option value="入經藏" ${u.mainTeam==='入經藏'?'selected':''}>入經藏</option>
-             <option value="法隨團" ${u.mainTeam==='法隨團'?'selected':''}>法隨團</option>
+             <option value="法髓團" ${u.mainTeam==='法髓團'?'selected':''}>法髓團</option>
            </select>
          </div>
          <div class="unit-edit-panel">
@@ -991,7 +1089,7 @@ function renderUnits(){
            <label class="day-chk"><input type="checkbox" id="ue-sup-0-${ui}" ${u.supportTeams&&u.supportTeams.includes('唐團')?'checked':''}>唐團</label>
            <label class="day-chk"><input type="checkbox" id="ue-sup-1-${ui}" ${u.supportTeams&&u.supportTeams.includes('優團')?'checked':''}>優團</label>
            <label class="day-chk"><input type="checkbox" id="ue-sup-2-${ui}" ${u.supportTeams&&u.supportTeams.includes('入經藏')?'checked':''}>入經藏</label>
-           <label class="day-chk"><input type="checkbox" id="ue-sup-3-${ui}" ${u.supportTeams&&u.supportTeams.includes('法隨團')?'checked':''}>法隨團</label>
+           <label class="day-chk"><input type="checkbox" id="ue-sup-3-${ui}" ${u.supportTeams&&u.supportTeams.includes('法髓團')?'checked':''}>法髓團</label>
          </div>`
       : `<div class="unit-header" onclick="toggleUnit(${ui})">
            <span class="expand-icon ${isOpen?'open':''}">▶</span>
