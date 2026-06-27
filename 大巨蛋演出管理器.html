@@ -45,6 +45,35 @@
       position: absolute; right: 0;
     }
     .btn-settings:hover { background: var(--primary-l); }
+    .btn-tangnotes { left: 0; right: auto; }
+    .btn-tangnotes.active { background: var(--primary); border-color: var(--primary); }
+
+    .music-status-btn {
+      background: none; border: 1px solid var(--border); border-radius: 20px;
+      padding: 4px 10px; font-size: .78rem; cursor: pointer; white-space: nowrap;
+      transition: background .1s;
+    }
+    .music-status-btn:hover { background: var(--primary-l); }
+    .note-item {
+      display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px;
+      background: #fff; border: 1px solid var(--border-s); border-radius: 8px; margin-bottom: 6px;
+    }
+    .note-cat-tag {
+      font-size: .7rem; font-weight: 700; color: var(--primary); background: var(--primary-l);
+      padding: 2px 8px; border-radius: 10px; flex-shrink: 0; white-space: nowrap;
+    }
+    .note-text { flex: 1; font-size: .85rem; color: var(--text); white-space: pre-wrap; word-break: break-all; }
+    .note-add-row { display: flex; align-items: flex-start; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .note-add-row input[type="text"] {
+      padding: 7px 10px; border: 1.5px solid var(--border); border-radius: 7px;
+      font-size: .85rem; background: var(--inner); color: var(--text);
+    }
+    .note-add-row textarea {
+      flex: 1; min-width: 160px; padding: 7px 10px; border: 1.5px solid var(--border);
+      border-radius: 7px; font-size: .85rem; background: var(--inner); color: var(--text);
+      font-family: inherit; resize: vertical; min-height: 36px;
+    }
+    .note-add-row input:focus, .note-add-row textarea:focus { outline: none; border-color: var(--primary); }
     .settings-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .settings-row .ll { font-size: .85rem; color: var(--muted); white-space: nowrap; }
     .settings-row input[type="text"] {
@@ -378,6 +407,7 @@
 <body>
 
 <div class="app-title-row">
+  <button class="btn-settings btn-tangnotes" onclick="toggleTangNotesView()" title="唐團工作筆記" id="tangnotes-toggle-btn">📝</button>
   <h1 id="app-h1">🎭 大巨蛋演出管理器</h1>
   <button class="btn-settings" onclick="toggleSettings()" title="設定">⚙️</button>
 </div>
@@ -394,6 +424,7 @@
   <div class="save-hint">⚠️ 會清除目前所有節目，換成程式內建的 85 個預設節目單（建議先匯出備份再重置）</div>
 </div>
 
+<div id="section-build">
 <!-- ── 建立段落 ── -->
 <div class="card">
   <div class="sec-label">正在建立的段落</div>
@@ -436,6 +467,9 @@
     <input type="text" id="newCategory" class="team-select" list="categoryList" placeholder="例：02慈善" style="width:140px">
     <datalist id="categoryList"></datalist>
   </div>
+  <div class="day-pick" style="margin-top:6px">
+    <label class="day-chk"><input type="checkbox" id="newTangNotes">列入唐團筆記</label>
+  </div>
   <div class="day-pick" style="margin-top:10px">
     <span class="ll">演出天數</span>
     <label class="day-chk"><input type="checkbox" id="newday-1">第1天</label>
@@ -445,7 +479,7 @@
   </div>
   <div class="day-pick" style="margin-top:6px">
     <span class="ll">主演團隊</span>
-    <select id="newMainTeam" class="team-select">
+    <select id="newMainTeam" class="team-select" onchange="if(this.value==='唐團')$('newTangNotes').checked=true">
       <option value="">無（純影片）</option>
       <option value="唐團">唐團</option>
       <option value="優團">優團</option>
@@ -462,7 +496,9 @@
   </div>
   <div class="save-hint">💡 上限欄位可留空；演出天數可留空（代表每天都演）；單元可留空；儲存後段落自動清空</div>
 </div>
+</div>
 
+<div id="section-units">
 <!-- ── 各節目紀錄 ── -->
 <div class="card">
   <div class="sec-label">各節目紀錄</div>
@@ -488,6 +524,15 @@
     <span class="auto-save-badge" id="save-badge">✓ 已自動儲存</span>
   </div>
 </div>
+</div>
+
+<!-- ── 唐團工作筆記 ── -->
+<div class="card" id="section-tangnotes" style="display:none">
+  <div class="sec-label">唐團工作筆記</div>
+  <div class="save-hint" style="margin:0 0 14px">列出主演／例外列入的節目，可記錄音樂檔案狀態與各類筆記（音樂／演員／影像）</div>
+  <div id="tangnotes-list"></div>
+  <datalist id="noteCategoryList"></datalist>
+</div>
 
 <script>
 /* ── 狀態 ── */
@@ -503,10 +548,18 @@ let activeTeamTab = 0;   // 0=全部，1~4=對應 TEAMS 索引（篩選顯示用
 let activeCategory = ''; // ''=全部，否則為指定的單元（category）名稱
 let hideAllDayUnits = false; // 是否隱藏「每天都演」的節目
 let appTitle = '大巨蛋演出管理器';
+let tangNotesView = false; // 是否正在顯示「唐團工作筆記」頁面
+let openTangNote = -1;     // 唐團筆記頁面中展開的節目 index（對應 units 全域 index）
 
 const TEAMS = ['唐團','優團','入經藏','法髓團'];
 const STORAGE_KEY = 'gigadome_units_v1';
 const TITLE_KEY = 'gigadome_title_v1';
+const MUSIC_STATUS_META = {
+  none:   { icon:'❌', label:'尚無檔案' },
+  yellow: { icon:'🟡', label:'已有檔案、需修改' },
+  green:  { icon:'🟢', label:'已有檔案' },
+};
+const MUSIC_STATUS_ORDER = ['none','yellow','green'];
 
 /* ── localStorage 自動儲存 ── */
 function saveData(){
@@ -611,14 +664,16 @@ const DEFAULT_UNITS = [
   ['06功德','慈濟小行星',0,[],'',[]],
   ['06功德','祈禱',0,[],'',[]],
 ].map(([category,name,limMs,days,mainTeam,supportTeams])=>(
-  { name, limMs, note:'', segs:[], days, mainTeam, supportTeams, category }
+  { name, limMs, note:'', segs:[], days, mainTeam, supportTeams, category,
+    inTangNotes: mainTeam==='唐團' || name==='粒粒皆清楚',
+    musicStatus: 'none', notes: [] }
 ));
 
 function loadData(){
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if(raw){ units = JSON.parse(raw); }
-    else { units = DEFAULT_UNITS.map(u=>({...u, segs:[...u.segs], days:[...u.days], supportTeams:[...u.supportTeams]})); saveData(); }
+    else { units = DEFAULT_UNITS.map(u=>({...u, segs:[...u.segs], days:[...u.days], supportTeams:[...u.supportTeams], notes:[...u.notes]})); saveData(); }
   } catch(e){ units = []; }
 }
 
@@ -651,7 +706,7 @@ function saveTitle(){
 }
 function resetToDefault(){
   if(!confirm('這會清除目前所有節目，換成程式內建的 85 個預設節目單，確定要這樣做嗎？\n（建議先按下方「💾 匯出備份」保留一份）')) return;
-  units = DEFAULT_UNITS.map(u=>({...u, segs:[...u.segs], days:[...u.days], supportTeams:[...u.supportTeams]}));
+  units = DEFAULT_UNITS.map(u=>({...u, segs:[...u.segs], days:[...u.days], supportTeams:[...u.supportTeams], notes:[...u.notes]}));
   openUnit=-1; editingUnit=-1; editingUSeg=null;
   activeCategory=''; activeDayTab=0; activeTeamTab=0; hideAllDayUnits=false;
   saveData(); renderUnits();
@@ -688,7 +743,7 @@ function importJSON(input){
       // 合併（避免重名覆蓋）
       incoming.forEach(u => {
         if(u && typeof u.name==='string' && Array.isArray(u.segs)){
-          units.push({ name: u.name, limMs: u.limMs||0, note: u.note||'', segs: u.segs, days: u.days||[], mainTeam: u.mainTeam||'', supportTeams: u.supportTeams||[], category: u.category||'' });
+          units.push({ name: u.name, limMs: u.limMs||0, note: u.note||'', segs: u.segs, days: u.days||[], mainTeam: u.mainTeam||'', supportTeams: u.supportTeams||[], category: u.category||'', inTangNotes: u.inTangNotes||false, musicStatus: u.musicStatus||'none', notes: u.notes||[] });
         }
       });
       saveData(); renderUnits();
@@ -833,13 +888,15 @@ function saveUnit(){
   const mainTeam=$('newMainTeam').value;
   const supportTeams=TEAMS.filter((t,i)=>$(`newsup-${i}`)?.checked);
   const category=$('newCategory').value.trim();
-  units.push({name, limMs, note:'', segs:[...curSegs], days, mainTeam, supportTeams, category});
+  const inTangNotes=$('newTangNotes').checked;
+  units.push({name, limMs, note:'', segs:[...curSegs], days, mainTeam, supportTeams, category, inTangNotes, musicStatus:'none', notes:[]});
   $('unitName').value='';
   ['limH','limM','limS'].forEach(id=>$(id).value='');
   [1,2,3,4].forEach(d=>{ const el=$(`newday-${d}`); if(el) el.checked=false; });
   $('newMainTeam').value='';
   TEAMS.forEach((t,i)=>{ const el=$(`newsup-${i}`); if(el) el.checked=false; });
   $('newCategory').value='';
+  $('newTangNotes').checked=false;
   curSegs=[]; editingCur=-1;
   renderCur(); saveData(); renderUnits();
 }
@@ -919,6 +976,8 @@ function flushEditUnit(ui){
   units[ui].supportTeams=TEAMS.filter((t,i)=>$(`ue-sup-${i}-${ui}`)?.checked);
   const catEl=$(`ue-category-${ui}`);
   if(catEl) units[ui].category=catEl.value.trim();
+  const tangEl=$(`ue-tangnotes-${ui}`);
+  if(tangEl) units[ui].inTangNotes=tangEl.checked;
 }
 
 function confirmEditUnit(ui){
@@ -1147,6 +1206,7 @@ function renderUnits(){
          <div class="unit-edit-panel">
            <span class="ue-lbl">單元</span>
            <input type="text" id="ue-category-${ui}" class="team-select" list="categoryList" value="${esc(u.category||'')}" placeholder="例：02慈善" style="width:140px" onclick="event.stopPropagation()">
+           <label class="day-chk" onclick="event.stopPropagation()"><input type="checkbox" id="ue-tangnotes-${ui}" ${u.inTangNotes?'checked':''}>列入唐團筆記</label>
          </div>`
       : `<div class="unit-header" onclick="toggleUnit(${ui})">
            <span class="expand-icon ${isOpen?'open':''}">▶</span>
@@ -1329,6 +1389,82 @@ function exportText(){
   navigator.clipboard.writeText(text)
     .then(()=>warn('✅ 摘要已複製到剪貼簿！'))
     .catch(()=>prompt('請手動複製：',text));
+}
+
+/* ── 唐團工作筆記 ── */
+function toggleTangNotesView(){
+  tangNotesView=!tangNotesView;
+  $('section-build').style.display = tangNotesView?'none':'';
+  $('section-units').style.display = tangNotesView?'none':'';
+  $('section-tangnotes').style.display = tangNotesView?'':'none';
+  $('tangnotes-toggle-btn').classList.toggle('active', tangNotesView);
+  if(tangNotesView){ openTangNote=-1; renderTangNotes(); }
+}
+function cycleMusicStatus(ui){
+  const cur=units[ui].musicStatus||'none';
+  const idx=MUSIC_STATUS_ORDER.indexOf(cur);
+  units[ui].musicStatus=MUSIC_STATUS_ORDER[(idx+1)%MUSIC_STATUS_ORDER.length];
+  saveData(); renderTangNotes();
+}
+function toggleTangNoteOpen(ui){
+  openTangNote = openTangNote===ui ? -1 : ui;
+  renderTangNotes();
+}
+function getNoteCategories(){
+  const set=new Set(['音樂','演員','影像']);
+  units.forEach(u=>(u.notes||[]).forEach(n=>set.add(n.category)));
+  return [...set];
+}
+function addNote(ui){
+  const catEl=$(`note-cat-${ui}`), textEl=$(`note-text-${ui}`);
+  const category=catEl.value.trim()||'其他';
+  const text=textEl.value.trim();
+  if(!text){ warn('⚠️ 請輸入筆記內容'); return; }
+  if(!units[ui].notes) units[ui].notes=[];
+  units[ui].notes.push({ id:Date.now()+Math.random(), category, text, ts:new Date().toISOString() });
+  saveData(); renderTangNotes();
+}
+function delNote(ui, id){
+  units[ui].notes=(units[ui].notes||[]).filter(n=>n.id!==id);
+  saveData(); renderTangNotes();
+}
+function renderTangNotes(){
+  const items=units.map((u,ui)=>({u,ui})).filter(({u})=>u.inTangNotes);
+  const list=$('tangnotes-list');
+  const cats=getNoteCategories();
+  const dl=$('noteCategoryList');
+  if(dl) dl.innerHTML=cats.map(c=>`<option value="${esc(c)}">`).join('');
+  if(!items.length){ list.innerHTML='<div class="empty-hint">目前沒有列入唐團筆記的節目</div>'; return; }
+  list.innerHTML=items.map(({u,ui})=>{
+    const meta=MUSIC_STATUS_META[u.musicStatus||'none'];
+    const isOpen=openTangNote===ui;
+    const notes=u.notes||[];
+    const notesHtml=notes.length
+      ? notes.map(n=>`
+          <div class="note-item">
+            <span class="note-cat-tag">${esc(n.category)}</span>
+            <span class="note-text">${esc(n.text)}</span>
+            <button class="bi d" onclick="delNote(${ui},${n.id})" title="刪除">✕</button>
+          </div>`).join('')
+      : '<div class="empty-hint" style="padding:8px 0">尚無筆記</div>';
+    return `<div class="unit-item">
+      <div class="unit-header" onclick="toggleTangNoteOpen(${ui})">
+        <span class="expand-icon ${isOpen?'open':''}">▶</span>
+        <span class="unit-name">${esc(u.name)}</span>
+        ${categoryLabel(u.category)}
+        ${teamLabel(u)}
+        <button class="music-status-btn" onclick="event.stopPropagation();cycleMusicStatus(${ui})" title="點擊切換音樂檔案狀態">${meta.icon} ${meta.label}</button>
+      </div>
+      ${isOpen?`<div class="unit-detail">
+        <div class="seg-list">${notesHtml}</div>
+        <div class="note-add-row">
+          <input type="text" id="note-cat-${ui}" list="noteCategoryList" placeholder="類別（音樂／演員／影像…）">
+          <textarea id="note-text-${ui}" placeholder="輸入筆記內容…"></textarea>
+          <button class="btn-dadd" onclick="addNote(${ui})">新增筆記</button>
+        </div>
+      </div>`:''}
+    </div>`;
+  }).join('');
 }
 
 /* ── Enter 快捷鍵 ── */
