@@ -388,6 +388,10 @@
     <input type="text" id="settingsTitleInput" maxlength="30">
     <button class="btn-save" onclick="saveTitle()">儲存</button>
   </div>
+  <div class="settings-row" style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--border)">
+    <button class="btn-backup btn-bk-export" onclick="resetToDefault()">🔄 重置為預設節目單</button>
+  </div>
+  <div class="save-hint">⚠️ 會清除目前所有節目，換成程式內建的 85 個預設節目單（建議先匯出備份再重置）</div>
 </div>
 
 <!-- ── 建立段落 ── -->
@@ -644,6 +648,15 @@ function saveTitle(){
   renderTitle();
   $('settings-panel').style.display = 'none';
   warn('✅ 名稱已更新');
+}
+function resetToDefault(){
+  if(!confirm('這會清除目前所有節目，換成程式內建的 85 個預設節目單，確定要這樣做嗎？\n（建議先按下方「💾 匯出備份」保留一份）')) return;
+  units = DEFAULT_UNITS.map(u=>({...u, segs:[...u.segs], days:[...u.days], supportTeams:[...u.supportTeams]}));
+  openUnit=-1; editingUnit=-1; editingUSeg=null;
+  activeCategory=''; activeDayTab=0; activeTeamTab=0; hideAllDayUnits=false;
+  saveData(); renderUnits();
+  $('settings-panel').style.display = 'none';
+  warn('✅ 已重置為預設節目單');
 }
 
 /* ── JSON 匯出備份 ── */
@@ -1059,6 +1072,7 @@ function renderUnits(){
     return;
   }
   renderCategoryTabs(); renderDayTabs(); renderTeamTabs();
+  const hideChk=$('hideAllDayChk'); if(hideChk) hideChk.checked=hideAllDayUnits;
 
   let grand=0, limTotal=0, actualWithLim=0, limCount=0, html='', shown=0;
   units.forEach((u,ui)=>{
