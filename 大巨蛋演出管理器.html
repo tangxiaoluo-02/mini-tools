@@ -80,6 +80,17 @@
       padding: 10px 12px; background: var(--primary-l); border-radius: 8px;
       margin-bottom: 12px; font-size: .85rem;
     }
+    .note-item.editing { background: #fffbeb; border-color: #fbbf24; flex-wrap: wrap; }
+    .note-edit-cat {
+      padding: 6px 8px; border: 1.5px solid var(--border); border-radius: 6px;
+      font-size: .85rem; width: 110px; background: #fff; color: var(--text);
+    }
+    .note-edit-text {
+      flex: 1; min-width: 160px; padding: 6px 8px; border: 1.5px solid var(--border);
+      border-radius: 6px; font-size: .85rem; font-family: inherit; resize: vertical;
+      min-height: 36px; background: #fff; color: var(--text);
+    }
+    .note-edit-cat:focus, .note-edit-text:focus { outline: none; border-color: var(--primary); }
     .settings-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .settings-row .ll { font-size: .85rem; color: var(--muted); white-space: nowrap; }
     .settings-row input[type="text"] {
@@ -568,6 +579,7 @@ let activeNoteCategory = ''; // 依筆記類別檢視時選定的類別，''=全
 let hideResolvedNotes = false; // 是否隱藏已解決筆記
 let selectedTangUnits = new Set(); // 依節目檢視：勾選要批次設定音樂狀態的節目 index
 let selectedNoteKeys = new Set();  // 依筆記類別檢視：勾選要批次標記已解決的筆記 key（`${ui}:${id}`）
+let editingNote = null; // {ui, id} 正在編輯的筆記
 
 const TEAMS = ['唐團','優團','入經藏','法髓團'];
 const STORAGE_KEY = 'gigadome_units_v1';
@@ -1458,6 +1470,43 @@ function delNote(ui, id){
   selectedNoteKeys.delete(noteKey(ui,id));
   saveData(); renderTangNotes();
 }
+function startEditNote(ui, id){ editingNote={ui,id}; renderTangNotes(); }
+function cancelEditNote(){ editingNote=null; renderTangNotes(); }
+function confirmEditNote(ui, id){
+  const note=(units[ui].notes||[]).find(n=>n.id===id);
+  if(!note) return;
+  const catEl=$(`note-edit-cat-${ui}-${id}`), textEl=$(`note-edit-text-${ui}-${id}`);
+  const category=catEl.value.trim()||'其他';
+  const text=textEl.value.trim();
+  if(!text){ warn('⚠️ 請輸入筆記內容'); return; }
+  note.category=category; note.text=text;
+  editingNote=null;
+  saveData(); renderTangNotes();
+}
+function renderNoteRow(ui, n, opts={}){
+  const isEditing = editingNote && editingNote.ui===ui && editingNote.id===n.id;
+  if(isEditing){
+    return `<div class="note-item editing">
+      <input type="text" id="note-edit-cat-${ui}-${n.id}" class="note-edit-cat" list="noteCategoryList" value="${esc(n.category)}">
+      <textarea id="note-edit-text-${ui}-${n.id}" class="note-edit-text">${esc(n.text)}</textarea>
+      <button class="btn-ok" onclick="confirmEditNote(${ui},${n.id})">儲存</button>
+      <button class="btn-cx" onclick="cancelEditNote()">取消</button>
+    </div>`;
+  }
+  const namePrefix = opts.showUnitName ? `<strong>${esc(opts.unitName)}</strong>　` : '';
+  const selectBox = opts.selectable ? `<input type="checkbox" ${opts.selected?'checked':''} onclick="toggleSelectNote(${ui},${n.id})">` : '';
+  const resolvedPart = opts.showResolvedToggle
+    ? `<label class="day-chk" style="flex-shrink:0"><input type="checkbox" ${n.resolved?'checked':''} onclick="toggleNoteResolved(${ui},${n.id})">已解決</label>`
+    : (n.resolved?'<span class="badge ok" style="flex-shrink:0">已解決</span>':'');
+  return `<div class="note-item">
+    ${selectBox}
+    <span class="note-cat-tag">${esc(n.category)}</span>
+    <span class="note-text${n.resolved?' note-resolved':''}" style="flex:1">${namePrefix}${esc(n.text)}</span>
+    ${resolvedPart}
+    <button class="bi" onclick="startEditNote(${ui},${n.id})" title="編輯">✏️</button>
+    <button class="bi d" onclick="delNote(${ui},${n.id})" title="刪除">✕</button>
+  </div>`;
+}
 
 /* ── 批次：音樂檔案狀態（依節目檢視） ── */
 function toggleSelectTangUnit(ui){
@@ -1536,13 +1585,7 @@ function renderTangNotesUnitView(){
     const notes=u.notes||[];
     const checked=selectedTangUnits.has(ui);
     const notesHtml=notes.length
-      ? notes.map(n=>`
-          <div class="note-item">
-            <span class="note-cat-tag">${esc(n.category)}</span>
-            <span class="note-text${n.resolved?' note-resolved':''}">${esc(n.text)}</span>
-            ${n.resolved?'<span class="badge ok" style="flex-shrink:0">已解決</span>':''}
-            <button class="bi d" onclick="delNote(${ui},${n.id})" title="刪除">✕</button>
-          </div>`).join('')
+      ? notes.map(n=>renderNoteRow(ui, n)).join('')
       : '<div class="empty-hint" style="padding:8px 0">尚無筆記</div>';
     return `<div class="unit-item">
       <div class="unit-header" onclick="toggleTangNoteOpen(${ui})">
@@ -1607,16 +1650,7 @@ function renderTangNotesByCategoryView(){
 
   list.innerHTML=filtered.map(({ui,u,n})=>{
     const key=noteKey(ui,n.id);
-    const checked=selectedNoteKeys.has(key);
-    return `<div class="note-item" style="align-items:center">
-      <input type="checkbox" ${checked?'checked':''} onclick="toggleSelectNote(${ui},${n.id})">
-      <span class="note-cat-tag">${esc(n.category)}</span>
-      <span class="note-text${n.resolved?' note-resolved':''}" style="flex:1"><strong>${esc(u.name)}</strong>　${esc(n.text)}</span>
-      <label class="day-chk" style="flex-shrink:0">
-        <input type="checkbox" ${n.resolved?'checked':''} onclick="toggleNoteResolved(${ui},${n.id})">已解決
-      </label>
-      <button class="bi d" onclick="delNote(${ui},${n.id})" title="刪除">✕</button>
-    </div>`;
+    return renderNoteRow(ui, n, { selectable:true, selected:selectedNoteKeys.has(key), showResolvedToggle:true, showUnitName:true, unitName:u.name });
   }).join('');
 }
 
