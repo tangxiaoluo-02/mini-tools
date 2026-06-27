@@ -59,7 +59,7 @@
       background: #fff; border: 1px solid var(--border-s); border-radius: 8px; margin-bottom: 6px;
     }
     .note-cat-tag {
-      font-size: .7rem; font-weight: 700; color: var(--primary); background: var(--primary-l);
+      font-size: .7rem; font-weight: 700;
       padding: 2px 8px; border-radius: 10px; flex-shrink: 0; white-space: nowrap;
     }
     .note-text { flex: 1; font-size: .85rem; color: var(--text); white-space: pre-wrap; word-break: break-all; }
@@ -374,13 +374,13 @@
     .unit-note:empty::before { content: attr(data-placeholder); color: #c0cfe0; pointer-events: none; }
 
     /* ── 合計 ── */
-    .grand-row { display: flex; justify-content: space-between; align-items: center; padding-top: 14px; margin-top: 6px; border-top: 1px solid var(--border-s); }
+    .grand-row { display: flex; justify-content: space-between; align-items: center; padding-bottom: 14px; margin-bottom: 10px; }
     .grand-lbl { color: var(--muted); font-size: .9rem; }
     .grand-val { font-family: 'Courier New', monospace; font-size: 1.1rem; font-weight: 700; color: var(--green); }
 
     .budget-row {
       display: flex; justify-content: space-between; align-items: center;
-      margin-top: 8px; padding: 8px 12px; border-radius: 8px; font-size: .88rem;
+      margin-top: 8px; margin-bottom: 18px; padding: 8px 12px; border-radius: 8px; font-size: .88rem;
     }
     .budget-row.surplus { background: var(--green-bg); }
     .budget-row.deficit { background: var(--red-bg); }
@@ -525,12 +525,12 @@
   <label class="day-chk" style="margin-bottom:14px;display:inline-flex">
     <input type="checkbox" id="hideAllDayChk" onchange="toggleHideAllDay()">隱藏每天都演的節目
   </label>
-  <div id="unit-list"><div class="empty-hint">尚無儲存的節目</div></div>
   <div class="grand-row" id="grand-row" style="display:none">
     <span class="grand-lbl" id="grand-lbl">全部合計</span>
     <span class="grand-val" id="grand-time"></span>
   </div>
   <div id="budget-row" style="display:none"></div>
+  <div id="unit-list"><div class="empty-hint">尚無儲存的節目</div></div>
   <button class="btn-export" id="export-btn" onclick="exportText()" style="display:none">📋 複製摘要到剪貼簿</button>
   <div class="backup-row">
     <button class="btn-backup btn-bk-export" onclick="exportJSON()">💾 匯出備份 (.json)</button>
@@ -590,6 +590,22 @@ const MUSIC_STATUS_META = {
   green:  { icon:'🟢', label:'已有檔案' },
 };
 const MUSIC_STATUS_ORDER = ['none','yellow','green'];
+const NOTE_CAT_FIXED_COLORS = {
+  '音樂': { bg:'#dbeafe', fg:'#1d4ed8' },
+  '演員': { bg:'#fef3c7', fg:'#b45309' },
+  '影像': { bg:'#dcfce7', fg:'#15803d' },
+};
+const NOTE_CAT_PALETTE = [
+  { bg:'#fce7f3', fg:'#be185d' }, { bg:'#e0e7ff', fg:'#4338ca' },
+  { bg:'#ffedd5', fg:'#c2410c' }, { bg:'#cffafe', fg:'#0e7490' },
+  { bg:'#f3e8ff', fg:'#7e22ce' }, { bg:'#fee2e2', fg:'#b91c1c' },
+];
+function noteCategoryColor(category){
+  if(NOTE_CAT_FIXED_COLORS[category]) return NOTE_CAT_FIXED_COLORS[category];
+  let hash=0;
+  for(let i=0;i<category.length;i++) hash=(hash*31+category.charCodeAt(i))>>>0;
+  return NOTE_CAT_PALETTE[hash % NOTE_CAT_PALETTE.length];
+}
 
 /* ── localStorage 自動儲存 ── */
 function saveData(){
@@ -1498,9 +1514,10 @@ function renderNoteRow(ui, n, opts={}){
   const resolvedPart = opts.showResolvedToggle
     ? `<label class="day-chk" style="flex-shrink:0"><input type="checkbox" ${n.resolved?'checked':''} onclick="toggleNoteResolved(${ui},${n.id})">已解決</label>`
     : (n.resolved?'<span class="badge ok" style="flex-shrink:0">已解決</span>':'');
+  const catColor=noteCategoryColor(n.category);
   return `<div class="note-item">
     ${selectBox}
-    <span class="note-cat-tag">${esc(n.category)}</span>
+    <span class="note-cat-tag" style="background:${catColor.bg};color:${catColor.fg}">${esc(n.category)}</span>
     <span class="note-text${n.resolved?' note-resolved':''}" style="flex:1">${namePrefix}${esc(n.text)}</span>
     ${resolvedPart}
     <button class="bi" onclick="startEditNote(${ui},${n.id})" title="編輯">✏️</button>
@@ -1591,10 +1608,10 @@ function renderTangNotesUnitView(){
       <div class="unit-header" onclick="toggleTangNoteOpen(${ui})">
         <input type="checkbox" onclick="event.stopPropagation();toggleSelectTangUnit(${ui})" ${checked?'checked':''}>
         <span class="expand-icon ${isOpen?'open':''}">▶</span>
+        <button class="music-status-btn" onclick="event.stopPropagation();cycleMusicStatus(${ui})" title="點擊切換音樂檔案狀態">${meta.icon} ${meta.label}</button>
         <span class="unit-name">${esc(u.name)}</span>
         ${categoryLabel(u.category)}
         ${teamLabel(u)}
-        <button class="music-status-btn" onclick="event.stopPropagation();cycleMusicStatus(${ui})" title="點擊切換音樂檔案狀態">${meta.icon} ${meta.label}</button>
       </div>
       ${isOpen?`<div class="unit-detail">
         <div class="seg-list">${notesHtml}</div>
@@ -1629,7 +1646,8 @@ function renderTangNotesByCategoryView(){
   catTabsEl.innerHTML=labels.map(l=>{
     const val=l==='全部'?'':l;
     const active=activeNoteCategory===val;
-    return `<button class="day-tab${active?' active':''}" onclick="setNoteCategoryTab('${val.replace(/'/g,"\\'")}')">${l}</button>`;
+    const style=val?(()=>{ const c=noteCategoryColor(val); return active?`background:${c.fg};border-color:${c.fg};color:#fff`:`background:${c.bg};border-color:${c.bg};color:${c.fg}`; })():'';
+    return `<button class="day-tab${active?' active':''}" style="${style}" onclick="setNoteCategoryTab('${val.replace(/'/g,"\\'")}')">${l}</button>`;
   }).join('');
 
   hideEl.innerHTML=`<label class="day-chk" style="margin:10px 0 14px;display:inline-flex">
