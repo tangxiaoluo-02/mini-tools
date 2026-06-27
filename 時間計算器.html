@@ -457,7 +457,7 @@ function loadData(){
 
 /* ── JSON 匯出備份 ── */
 function exportJSON(){
-  flushNote();
+  flushAllEditing();
   const json = JSON.stringify({ version:1, exported: new Date().toISOString(), units }, null, 2);
   const blob = new Blob([json], {type:'application/json'});
   const url  = URL.createObjectURL(blob);
@@ -762,6 +762,10 @@ function flushNote(){
   const el=$(`note-${openUnit}`);
   if(el) units[openUnit].note=el.innerText.trim();
 }
+function flushAllEditing(){
+  flushNote();
+  if(editingUnit>=0&&editingUnit<units.length) flushEditUnit(editingUnit);
+}
 
 function getEditVals(prefix, suffix){
   return {
@@ -974,7 +978,7 @@ function renderDetail(u, ui){
 
 /* ── 匯出 ── */
 function exportText(){
-  flushNote();
+  flushAllEditing();
   const list=units.filter(u=>unitMatchesTab(u, activeDayTab));
   if(!list.length) return;
   let grand=0, limTotal=0, actualWithLim=0, limCount=0;
