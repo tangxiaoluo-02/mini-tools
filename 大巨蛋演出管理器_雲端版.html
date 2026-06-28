@@ -280,6 +280,18 @@
     }
     .team-select:focus { outline: none; border-color: var(--primary); }
 
+    .color-swatches { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+    .color-swatch {
+      width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent;
+      cursor: pointer; padding: 0; flex-shrink: 0;
+    }
+    .color-swatch.selected { border-color: var(--text); box-shadow: 0 0 0 2px #fff inset; }
+    .color-swatch.auto {
+      background: #fff; border: 2px dashed var(--border); color: var(--muted);
+      font-size: .75rem; display: flex; align-items: center; justify-content: center;
+    }
+    .color-swatch.auto.selected { border-style: solid; border-color: var(--text); }
+
     /* ── 單元列表 ── */
     #unit-list { display: flex; flex-direction: column; gap: 10px; }
     .empty-hint { text-align: center; color: var(--muted); padding: 24px 0; font-size: .9rem; }
@@ -632,6 +644,7 @@ const MUSIC_STATUS_META = {
   na:     { icon:'⚪', label:'不需檔案' },
 };
 const MUSIC_STATUS_ORDER = ['none','yellow','green','na'];
+const COLOR_PRESETS = ['#ef4444','#f97316','#eab308','#22c55e','#06b6d4','#3b82f6','#a855f7','#ec4899','#6b7280'];
 const NOTE_CAT_FIXED_COLORS = {
   '音樂': { bg:'#dbeafe', fg:'#1d4ed8' },
   '演員': { bg:'#fef3c7', fg:'#b45309' },
@@ -1221,9 +1234,15 @@ function flushEditUnit(ui){
   if(catEl) units[ui].category=catEl.value.trim();
   const tangEl=$(`ue-tangnotes-${ui}`);
   if(tangEl) units[ui].inTangNotes=tangEl.checked;
-  const colorOn=$(`ue-color-on-${ui}`)?.checked;
-  const colorVal=$(`ue-color-${ui}`)?.value;
-  units[ui].highlightColor = colorOn ? colorVal : '';
+  const colorEl=$(`ue-color-${ui}`);
+  if(colorEl) units[ui].highlightColor = colorEl.value;
+}
+function pickUnitColor(ui, color, btnEl){
+  const input=$(`ue-color-${ui}`);
+  if(input) input.value=color;
+  const panel=btnEl.closest('.color-swatches');
+  if(panel) panel.querySelectorAll('.color-swatch').forEach(b=>b.classList.remove('selected'));
+  btnEl.classList.add('selected');
 }
 
 function confirmEditUnit(ui){
@@ -1466,9 +1485,11 @@ function renderUnits(){
          </div>
          <div class="unit-edit-panel">
            <span class="ue-lbl">標記顏色</span>
-           <label class="day-chk" onclick="event.stopPropagation()"><input type="checkbox" id="ue-color-on-${ui}" ${u.highlightColor?'checked':''}>自訂顏色</label>
-           <input type="color" id="ue-color-${ui}" value="${u.highlightColor||'#2563eb'}" onclick="event.stopPropagation()" style="width:44px;height:32px;padding:2px;border:1.5px solid var(--border);border-radius:6px;cursor:pointer;">
-           <span class="ue-lbl">不勾選就跟著唐團自動標色</span>
+           <input type="hidden" id="ue-color-${ui}" value="${u.highlightColor||''}">
+           <div class="color-swatches" onclick="event.stopPropagation()">
+             <button type="button" class="color-swatch auto${!u.highlightColor?' selected':''}" onclick="pickUnitColor(${ui},'',this)" title="自動（跟著唐團）">✕</button>
+             ${COLOR_PRESETS.map(c=>`<button type="button" class="color-swatch${u.highlightColor===c?' selected':''}" style="background:${c}" onclick="pickUnitColor(${ui},'${c}',this)" title="${c}"></button>`).join('')}
+           </div>
          </div>`
       : `<div class="unit-header tn-stacked" onclick="toggleUnit(${ui})">
            <div class="tn-row-top">
