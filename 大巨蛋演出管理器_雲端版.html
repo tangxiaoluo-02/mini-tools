@@ -620,6 +620,7 @@ let editingNote = null; // {ui, id} 正在編輯的筆記
 const TEAMS = ['唐團','優團','入經藏','法髓團'];
 const STORAGE_KEY = 'gigadome_units_v1';
 const TITLE_KEY = 'gigadome_title_v1';
+const FILTERS_KEY = 'gigadome_filters_v1';
 const SYNC_URL_KEY = 'gigadome_sync_url_v1';
 const SYNC_TIME_KEY = 'gigadome_sync_time_v1';
 let syncUrl = '';
@@ -655,6 +656,31 @@ function saveData(){
     const badge = $('save-badge');
     if(badge){ badge.classList.add('show'); clearTimeout(saveData._t); saveData._t = setTimeout(()=>badge.classList.remove('show'), 2000); }
   } catch(e){}
+  scheduleSync();
+}
+
+/* ── 篩選狀態（分頁/開關）的記憶與同步 ── */
+function getFiltersSnapshot(){
+  return { activeDayTab, activeTeamTab, activeCategory, hideAllDayUnits, tangViewMode, activeNoteCategory, hideResolvedNotes };
+}
+function applyFiltersSnapshot(f){
+  if(!f) return;
+  if(typeof f.activeDayTab==='number') activeDayTab=f.activeDayTab;
+  if(typeof f.activeTeamTab==='number') activeTeamTab=f.activeTeamTab;
+  if(typeof f.activeCategory==='string') activeCategory=f.activeCategory;
+  if(typeof f.hideAllDayUnits==='boolean') hideAllDayUnits=f.hideAllDayUnits;
+  if(typeof f.tangViewMode==='string') tangViewMode=f.tangViewMode;
+  if(typeof f.activeNoteCategory==='string') activeNoteCategory=f.activeNoteCategory;
+  if(typeof f.hideResolvedNotes==='boolean') hideResolvedNotes=f.hideResolvedNotes;
+}
+function loadFilters(){
+  try {
+    const raw=localStorage.getItem(FILTERS_KEY);
+    if(raw) applyFiltersSnapshot(JSON.parse(raw));
+  } catch(e){}
+}
+function saveFilters(){
+  try { localStorage.setItem(FILTERS_KEY, JSON.stringify(getFiltersSnapshot())); } catch(e){}
   scheduleSync();
 }
 
@@ -828,12 +854,14 @@ async function forceDownloadFromCloud(){
     if(!cloud || !Array.isArray(cloud.units)){ setSyncStatus('⚠️ 雲端目前沒有可用的資料'); return; }
     units=cloud.units;
     if(cloud.appTitle) appTitle=cloud.appTitle;
+    applyFiltersSnapshot(cloud.filters);
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(units));
       localStorage.setItem(TITLE_KEY, appTitle);
+      localStorage.setItem(FILTERS_KEY, JSON.stringify(getFiltersSnapshot()));
       localStorage.setItem(SYNC_TIME_KEY, cloudTime);
     } catch(e){}
-    renderTitle(); renderUnits();
+    rerenderAll();
     setSyncStatus(`☁️ 已從雲端下載（${fmtSyncTime(cloudTime)}）`);
   } catch(err){
     setSyncStatus('⚠️ 雲端連線失敗，請檢查網址或網路');
@@ -851,14 +879,21 @@ function fmtSyncTime(iso){
 }
 function scheduleSync(){
   if(!syncUrl) return;
+  let hasSyncedBefore=''; try{ hasSyncedBefore=localStorage.getItem(SYNC_TIME_KEY)||''; }catch(e){}
+  if(!hasSyncedBefore) return; // 還沒首次同步過，不自動上傳，避免搶在使用者選擇方向前覆蓋雲端
   clearTimeout(syncTimer);
   syncTimer=setTimeout(syncUpload, 1500);
+}
+function rerenderAll(){
+  renderTitle();
+  renderUnits();
+  if(tangNotesView) renderTangNotes();
 }
 async function syncUpload(){
   if(!syncUrl) return;
   setSyncStatus('☁️ 同步中…');
   try {
-    const payload={ units, appTitle };
+    const payload={ units, appTitle, filters:getFiltersSnapshot() };
     const res=await fetch(syncUrl, {
       method:'POST',
       headers:{ 'Content-Type':'text/plain;charset=utf-8' },
@@ -883,12 +918,14 @@ async function syncDownloadIfNewer(){
     if(cloud && Array.isArray(cloud.units) && cloud.units.length && (!localTime || cloudTime>localTime)){
       units=cloud.units;
       if(cloud.appTitle) appTitle=cloud.appTitle;
+      applyFiltersSnapshot(cloud.filters);
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(units));
         localStorage.setItem(TITLE_KEY, appTitle);
+        localStorage.setItem(FILTERS_KEY, JSON.stringify(getFiltersSnapshot()));
         localStorage.setItem(SYNC_TIME_KEY, cloudTime);
       } catch(e){}
-      renderTitle(); renderUnits();
+      rerenderAll();
       setSyncStatus(`☁️ 已從雲端更新（${fmtSyncTime(cloudTime)}）`);
     } else if(!cloud || !cloud.units || !cloud.units.length){
       await syncUpload();
@@ -1221,7 +1258,7 @@ function renderDayTabs(){
     `<button class="day-tab${activeDayTab===i?' active':''}" onclick="setDayTab(${i})">${l}</button>`
   ).join('');
 }
-function setDayTab(tab){ activeDayTab=tab; renderUnits(); }
+function setDayTab(tab){ activeDayTab=tab; saveFilters(); renderUnits(); }
 
 /* ── 團隊分頁 ── */
 function unitMatchesTeam(u, tab){
@@ -1244,7 +1281,7 @@ function renderTeamTabs(){
     `<button class="day-tab${activeTeamTab===i?' active':''}" onclick="setTeamTab(${i})">${l}</button>`
   ).join('');
 }
-function setTeamTab(tab){ activeTeamTab=tab; renderUnits(); }
+function setTeamTab(tab){ activeTeamTab=tab; saveFilters(); renderUnits(); }
 
 /* ── 單元分頁 ── */
 function unitMatchesCategory(u, cat){
@@ -1270,7 +1307,7 @@ function renderCategoryTabs(){
     `<button class="day-tab${(i===0?activeCategory==='':activeCategory===l)?' active':''}" onclick="setCategoryTab(${i===0?`''`:`'${l.replace(/'/g,"\\'")}'`})">${l}</button>`
   ).join('');
 }
-function setCategoryTab(cat){ activeCategory=cat; renderUnits(); }
+function setCategoryTab(cat){ activeCategory=cat; saveFilters(); renderUnits(); }
 
 /* ── 隱藏每天都演的節目 ── */
 function isEveryDayUnit(u){
@@ -1278,6 +1315,7 @@ function isEveryDayUnit(u){
 }
 function toggleHideAllDay(){
   hideAllDayUnits=$('hideAllDayChk').checked;
+  saveFilters();
   renderUnits();
 }
 
@@ -1638,6 +1676,7 @@ function toggleTangNotesView(){
 }
 function setTangViewMode(mode){
   tangViewMode=mode;
+  saveFilters();
   selectedTangUnits.clear(); selectedNoteKeys.clear();
   renderTangNotes();
 }
@@ -1772,9 +1811,10 @@ function batchSetNotesResolved(resolved){
   selectedNoteKeys.clear();
   saveData(); renderTangNotes();
 }
-function setNoteCategoryTab(cat){ activeNoteCategory=cat; renderTangNotes(); }
+function setNoteCategoryTab(cat){ activeNoteCategory=cat; saveFilters(); renderTangNotes(); }
 function toggleHideResolvedNotes(){
   hideResolvedNotes=$('hideResolvedChk').checked;
+  saveFilters();
   renderTangNotes();
 }
 
@@ -1902,7 +1942,7 @@ document.addEventListener('keydown',e=>{
 });
 
 /* ── 初始化：從 localStorage 讀取 ── */
-loadTitle(); loadSyncUrl(); loadData(); renderCur(); renderUnits();
+loadTitle(); loadSyncUrl(); loadData(); loadFilters(); renderCur(); renderUnits();
 if(syncUrl){
   let hasSyncedBefore=''; try{ hasSyncedBefore=localStorage.getItem(SYNC_TIME_KEY)||''; }catch(e){}
   if(hasSyncedBefore) syncDownloadIfNewer();
