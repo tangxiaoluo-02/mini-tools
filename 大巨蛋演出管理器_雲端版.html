@@ -444,8 +444,13 @@
     <button class="btn-save" onclick="saveSyncUrl()">儲存</button>
   </div>
   <div class="save-hint" id="sync-status">尚未設定雲端同步</div>
+  <div class="backup-row" style="margin-top:10px">
+    <button class="btn-backup btn-bk-export" onclick="forceUploadToCloud()">⬆️ 上傳本機到雲端</button>
+    <button class="btn-backup btn-bk-import" onclick="forceDownloadFromCloud()">⬇️ 從雲端下載</button>
+  </div>
+  <div class="save-hint">💡 第一次連同一個雲端網址時，請手動選「上傳」或「下載」決定方向；之後重新整理頁面會自動比對較新版本，不用每次手動選</div>
   <div class="settings-row" style="margin-top:10px">
-    <button class="btn-backup btn-bk-export" onclick="manualSync()">🔄 立即同步</button>
+    <button class="btn-backup btn-bk-export" onclick="manualSync()">🔄 立即同步（已同步過才能用）</button>
   </div>
   <div class="settings-row" style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--border)">
     <button class="btn-backup btn-bk-export" onclick="resetToDefault()">🔄 重置為預設節目單</button>
@@ -777,8 +782,42 @@ function saveSyncUrl(){
   const v = $('syncUrlInput').value.trim();
   syncUrl = v;
   try { localStorage.setItem(SYNC_URL_KEY, syncUrl); } catch(e){}
-  if(syncUrl){ warn('✅ 已儲存同步網址'); syncDownloadIfNewer(); }
-  else { setSyncStatus('尚未設定雲端同步'); warn('已清除同步網址'); }
+  if(syncUrl){
+    warn('✅ 已儲存同步網址');
+    let hasSyncedBefore=''; try{ hasSyncedBefore=localStorage.getItem(SYNC_TIME_KEY)||''; }catch(e){}
+    if(hasSyncedBefore){
+      syncDownloadIfNewer();
+    } else {
+      setSyncStatus('⚠️ 第一次連這個雲端網址，請選擇下方「⬆️ 上傳本機到雲端」或「⬇️ 從雲端下載」');
+    }
+  } else { setSyncStatus('尚未設定雲端同步'); warn('已清除同步網址'); }
+}
+async function forceUploadToCloud(){
+  if(!syncUrl){ warn('⚠️ 請先填寫雲端同步網址'); return; }
+  if(!confirm('這會把「目前畫面上的資料」整份覆蓋到雲端，雲端原有內容會被取代。確定要這樣做嗎？')) return;
+  await syncUpload();
+}
+async function forceDownloadFromCloud(){
+  if(!syncUrl){ warn('⚠️ 請先填寫雲端同步網址'); return; }
+  if(!confirm('這會用「雲端目前的資料」整份覆蓋本機畫面，本機未上傳的修改會被取代（建議先匯出備份）。確定要這樣做嗎？')) return;
+  setSyncStatus('☁️ 下載中…');
+  try {
+    const res=await fetch(syncUrl);
+    const json=await res.json();
+    const cloud=json.data, cloudTime=json.updatedAt||'';
+    if(!cloud || !Array.isArray(cloud.units)){ setSyncStatus('⚠️ 雲端目前沒有可用的資料'); return; }
+    units=cloud.units;
+    if(cloud.appTitle) appTitle=cloud.appTitle;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(units));
+      localStorage.setItem(TITLE_KEY, appTitle);
+      localStorage.setItem(SYNC_TIME_KEY, cloudTime);
+    } catch(e){}
+    renderTitle(); renderUnits();
+    setSyncStatus(`☁️ 已從雲端下載（${fmtSyncTime(cloudTime)}）`);
+  } catch(err){
+    setSyncStatus('⚠️ 雲端連線失敗，請檢查網址或網路');
+  }
 }
 function setSyncStatus(text){
   const el=$('sync-status');
@@ -840,7 +879,11 @@ async function syncDownloadIfNewer(){
     setSyncStatus('⚠️ 雲端連線失敗，請檢查網址或網路');
   }
 }
-function manualSync(){ syncDownloadIfNewer(); }
+function manualSync(){
+  let hasSyncedBefore=''; try{ hasSyncedBefore=localStorage.getItem(SYNC_TIME_KEY)||''; }catch(e){}
+  if(hasSyncedBefore) syncDownloadIfNewer();
+  else setSyncStatus('⚠️ 還沒首次同步過，請用下方「⬆️ 上傳本機到雲端」或「⬇️ 從雲端下載」');
+}
 function resetToDefault(){
   if(!confirm('這會清除目前所有節目，換成程式內建的 85 個預設節目單，確定要這樣做嗎？\n（建議先按下方「💾 匯出備份」保留一份）')) return;
   units = DEFAULT_UNITS.map(u=>({...u, segs:[...u.segs], days:[...u.days], supportTeams:[...u.supportTeams], notes:[...u.notes]}));
@@ -1774,7 +1817,11 @@ document.addEventListener('keydown',e=>{
 
 /* ── 初始化：從 localStorage 讀取 ── */
 loadTitle(); loadSyncUrl(); loadData(); renderCur(); renderUnits();
-if(syncUrl) syncDownloadIfNewer();
+if(syncUrl){
+  let hasSyncedBefore=''; try{ hasSyncedBefore=localStorage.getItem(SYNC_TIME_KEY)||''; }catch(e){}
+  if(hasSyncedBefore) syncDownloadIfNewer();
+  else setSyncStatus('⚠️ 還沒首次同步過，請選擇下方「⬆️ 上傳本機到雲端」或「⬇️ 從雲端下載」');
+}
 </script>
 </body>
 </html>
