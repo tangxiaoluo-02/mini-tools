@@ -974,17 +974,21 @@ function importJSON(input){
       const incoming = Array.isArray(data) ? data : (data.units || []);
       // 驗證基本結構
       if(!Array.isArray(incoming)) throw new Error('格式錯誤');
-      if(units.length > 0 && !confirm(`目前已有 ${units.length} 個節目，匯入後「同名節目」會被覆蓋更新，其他節目不受影響、新節目會新增進來。確定繼續嗎？`)){
+      if(units.length > 0 && !confirm(`目前已有 ${units.length} 個節目，匯入後將以備份檔的順序與內容為主（同名節目會被覆蓋更新），本機獨有、備份檔沒有的節目會接在後面保留。確定繼續嗎？`)){
         input.value=''; return;
       }
-      // 同名覆蓋，否則新增
+      // 以備份檔順序重建陣列：同名節目用備份內容覆蓋並採用備份檔的順序；
+      // 本機獨有（備份檔沒有）的節目接在後面保留，不會被丟掉
+      const usedNames=new Set();
+      const merged=[];
       incoming.forEach(u => {
         if(u && typeof u.name==='string' && Array.isArray(u.segs)){
-          const newUnit={ name: u.name, limMs: u.limMs||0, note: u.note||'', segs: u.segs, days: u.days||[], mainTeam: u.mainTeam||'', supportTeams: u.supportTeams||[], category: u.category||'', inTangNotes: u.inTangNotes||false, musicStatus: u.musicStatus||'none', notes: u.notes||[], highlightColor: u.highlightColor||'' };
-          const idx=units.findIndex(existing=>existing.name===newUnit.name);
-          if(idx>=0) units[idx]=newUnit; else units.push(newUnit);
+          merged.push({ name: u.name, limMs: u.limMs||0, note: u.note||'', segs: u.segs, days: u.days||[], mainTeam: u.mainTeam||'', supportTeams: u.supportTeams||[], category: u.category||'', inTangNotes: u.inTangNotes||false, musicStatus: u.musicStatus||'none', notes: u.notes||[], highlightColor: u.highlightColor||'' });
+          usedNames.add(u.name);
         }
       });
+      units.forEach(u => { if(!usedNames.has(u.name)) merged.push(u); });
+      units = merged;
       saveData(); renderUnits();
       warn('✅ 匯入成功！');
     } catch(err) {
