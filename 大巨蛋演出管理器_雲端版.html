@@ -61,6 +61,13 @@
     .tn-row-top .unit-name { flex: 1; min-width: 0; }
     .tn-row-tags { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding-left: 28px; }
     .tn-row-tags:empty { display: none; }
+
+    .note-item.note-stacked { flex-direction: column; align-items: stretch; gap: 6px; }
+    .note-row-top { display: flex; align-items: flex-start; gap: 8px; }
+    .note-row-bottom { display: flex; align-items: center; gap: 4px; }
+    .note-unit-name { font-size: .78rem; font-weight: 700; color: var(--text); }
+    .resolved-toggle { font-size: 1.1rem; flex-shrink: 0; color: var(--muted); }
+    .resolved-toggle.on { color: var(--green); }
     .note-item {
       display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px;
       background: #fff; border: 1px solid var(--border-s); border-radius: 8px; margin-bottom: 6px;
@@ -281,6 +288,8 @@
     .unit-item.tang-row { border-left: 5px solid var(--primary); }
     .unit-item.tang-row .unit-header { background: var(--primary-l); }
     .unit-item.tang-row .unit-header:hover { background: var(--border); }
+    .unit-item.custom-color .unit-header { background: var(--custom-bg); }
+    .unit-item.custom-color .unit-header:hover { background: var(--custom-bg-hover); }
 
     .unit-header {
       display: flex; align-items: center; padding: 12px 14px; gap: 10px;
@@ -604,6 +613,7 @@ let activeNoteCategory = ''; // 依筆記類別檢視時選定的類別，''=全
 let hideResolvedNotes = false; // 是否隱藏已解決筆記
 let selectedTangUnits = new Set(); // 依節目檢視：勾選要批次設定音樂狀態的節目 index
 let tangSelectMode = false; // 依節目檢視：是否顯示批次選取勾選框
+let tangNoteSelectMode = false; // 依筆記類別檢視：是否顯示批次選取勾選框
 let selectedNoteKeys = new Set();  // 依筆記類別檢視：勾選要批次標記已解決的筆記 key（`${ui}:${id}`）
 let editingNote = null; // {ui, id} 正在編輯的筆記
 
@@ -618,8 +628,9 @@ const MUSIC_STATUS_META = {
   none:   { icon:'❌', label:'尚無檔案' },
   yellow: { icon:'🟡', label:'已有檔案、需修改' },
   green:  { icon:'🟢', label:'已有檔案' },
+  na:     { icon:'⚪', label:'不需檔案' },
 };
-const MUSIC_STATUS_ORDER = ['none','yellow','green'];
+const MUSIC_STATUS_ORDER = ['none','yellow','green','na'];
 const NOTE_CAT_FIXED_COLORS = {
   '音樂': { bg:'#dbeafe', fg:'#1d4ed8' },
   '演員': { bg:'#fef3c7', fg:'#b45309' },
@@ -740,7 +751,7 @@ const DEFAULT_UNITS = [
 ].map(([category,name,limMs,days,mainTeam,supportTeams])=>(
   { name, limMs, note:'', segs:[], days, mainTeam, supportTeams, category,
     inTangNotes: mainTeam==='唐團' || name==='粒粒皆清楚',
-    musicStatus: 'none', notes: [] }
+    musicStatus: 'none', notes: [], highlightColor: '' }
 ));
 
 function loadData(){
@@ -932,7 +943,7 @@ function importJSON(input){
       // 同名覆蓋，否則新增
       incoming.forEach(u => {
         if(u && typeof u.name==='string' && Array.isArray(u.segs)){
-          const newUnit={ name: u.name, limMs: u.limMs||0, note: u.note||'', segs: u.segs, days: u.days||[], mainTeam: u.mainTeam||'', supportTeams: u.supportTeams||[], category: u.category||'', inTangNotes: u.inTangNotes||false, musicStatus: u.musicStatus||'none', notes: u.notes||[] };
+          const newUnit={ name: u.name, limMs: u.limMs||0, note: u.note||'', segs: u.segs, days: u.days||[], mainTeam: u.mainTeam||'', supportTeams: u.supportTeams||[], category: u.category||'', inTangNotes: u.inTangNotes||false, musicStatus: u.musicStatus||'none', notes: u.notes||[], highlightColor: u.highlightColor||'' };
           const idx=units.findIndex(existing=>existing.name===newUnit.name);
           if(idx>=0) units[idx]=newUnit; else units.push(newUnit);
         }
@@ -1080,7 +1091,7 @@ function saveUnit(){
   const supportTeams=TEAMS.filter((t,i)=>$(`newsup-${i}`)?.checked);
   const category=$('newCategory').value.trim();
   const inTangNotes=$('newTangNotes').checked;
-  units.push({name, limMs, note:'', segs:[...curSegs], days, mainTeam, supportTeams, category, inTangNotes, musicStatus:'none', notes:[]});
+  units.push({name, limMs, note:'', segs:[...curSegs], days, mainTeam, supportTeams, category, inTangNotes, musicStatus:'none', notes:[], highlightColor:''});
   $('unitName').value='';
   ['limH','limM','limS'].forEach(id=>$(id).value='');
   [1,2,3,4].forEach(d=>{ const el=$(`newday-${d}`); if(el) el.checked=false; });
@@ -1169,6 +1180,9 @@ function flushEditUnit(ui){
   if(catEl) units[ui].category=catEl.value.trim();
   const tangEl=$(`ue-tangnotes-${ui}`);
   if(tangEl) units[ui].inTangNotes=tangEl.checked;
+  const colorOn=$(`ue-color-on-${ui}`)?.checked;
+  const colorVal=$(`ue-color-${ui}`)?.value;
+  units[ui].highlightColor = colorOn ? colorVal : '';
 }
 
 function confirmEditUnit(ui){
@@ -1401,6 +1415,12 @@ function renderUnits(){
            <span class="ue-lbl">單元</span>
            <input type="text" id="ue-category-${ui}" class="team-select" list="categoryList" value="${esc(u.category||'')}" placeholder="例：02慈善" style="width:140px" onclick="event.stopPropagation()">
            <label class="day-chk" onclick="event.stopPropagation()"><input type="checkbox" id="ue-tangnotes-${ui}" ${u.inTangNotes?'checked':''}>列入唐團筆記</label>
+         </div>
+         <div class="unit-edit-panel">
+           <span class="ue-lbl">標記顏色</span>
+           <label class="day-chk" onclick="event.stopPropagation()"><input type="checkbox" id="ue-color-on-${ui}" ${u.highlightColor?'checked':''}>自訂顏色</label>
+           <input type="color" id="ue-color-${ui}" value="${u.highlightColor||'#2563eb'}" onclick="event.stopPropagation()" style="width:44px;height:32px;padding:2px;border:1.5px solid var(--border);border-radius:6px;cursor:pointer;">
+           <span class="ue-lbl">不勾選就跟著唐團自動標色</span>
          </div>`
       : `<div class="unit-header" onclick="toggleUnit(${ui})">
            <span class="expand-icon ${isOpen?'open':''}">▶</span>
@@ -1415,8 +1435,14 @@ function renderUnits(){
            <button class="btn-del-u"  onclick="event.stopPropagation();delUnit(${ui})">刪除</button>
          </div>`;
 
-    const tangRow = isTangInvolved(u) ? ' tang-row' : '';
-    html+=`<div class="unit-item${tangRow}">
+    let itemClass='', itemStyle='';
+    if(u.highlightColor){
+      itemClass=' custom-color';
+      itemStyle=` style="--custom-bg:${u.highlightColor}26;--custom-bg-hover:${u.highlightColor}40;border-left:5px solid ${u.highlightColor}"`;
+    } else if(isTangInvolved(u)){
+      itemClass=' tang-row';
+    }
+    html+=`<div class="unit-item${itemClass}"${itemStyle}>
       ${headerHtml}
       ${isOpen?renderDetail(u,ui):''}
     </div>`;
@@ -1656,16 +1682,33 @@ function renderNoteRow(ui, n, opts={}){
       <button class="btn-cx" onclick="cancelEditNote()">取消</button>
     </div>`;
   }
-  const namePrefix = opts.showUnitName ? `<strong>${esc(opts.unitName)}</strong>　` : '';
-  const selectBox = opts.selectable ? `<input type="checkbox" ${opts.selected?'checked':''} onclick="toggleSelectNote(${ui},${n.id})">` : '';
-  const resolvedPart = opts.showResolvedToggle
-    ? `<label class="day-chk" style="flex-shrink:0"><input type="checkbox" ${n.resolved?'checked':''} onclick="toggleNoteResolved(${ui},${n.id})">已解決</label>`
-    : (n.resolved?'<span class="badge ok" style="flex-shrink:0">已解決</span>':'');
   const catColor=noteCategoryColor(n.category);
+
+  if(opts.stacked){
+    const selectBox = opts.selectable ? `<input type="checkbox" ${opts.selected?'checked':''} onclick="toggleSelectNote(${ui},${n.id})">` : '';
+    const resolvedBtn = opts.showResolvedToggle
+      ? `<button class="bi resolved-toggle${n.resolved?' on':''}" onclick="toggleNoteResolved(${ui},${n.id})" title="${n.resolved?'已解決（點擊取消）':'點擊標記已解決'}">${n.resolved?'☑':'☐'}</button>`
+      : (n.resolved?'<span class="badge ok" style="flex-shrink:0">已解決</span>':'');
+    return `<div class="note-item note-stacked">
+      <div class="note-row-top">
+        ${selectBox}
+        <span class="note-cat-tag" style="background:${catColor.bg};color:${catColor.fg}">${esc(n.category)}</span>
+        <span class="note-text${n.resolved?' note-resolved':''}" style="flex:1">${esc(n.text)}</span>
+      </div>
+      <div class="note-row-bottom">
+        ${opts.showUnitName?`<span class="note-unit-name">${esc(opts.unitName)}</span>`:''}
+        <span style="flex:1"></span>
+        ${resolvedBtn}
+        <button class="bi" onclick="startEditNote(${ui},${n.id})" title="編輯">✏️</button>
+        <button class="bi d" onclick="delNote(${ui},${n.id})" title="刪除">✕</button>
+      </div>
+    </div>`;
+  }
+
+  const resolvedPart = n.resolved?'<span class="badge ok" style="flex-shrink:0">已解決</span>':'';
   return `<div class="note-item">
-    ${selectBox}
     <span class="note-cat-tag" style="background:${catColor.bg};color:${catColor.fg}">${esc(n.category)}</span>
-    <span class="note-text${n.resolved?' note-resolved':''}" style="flex:1">${namePrefix}${esc(n.text)}</span>
+    <span class="note-text${n.resolved?' note-resolved':''}" style="flex:1">${esc(n.text)}</span>
     ${resolvedPart}
     <button class="bi" onclick="startEditNote(${ui},${n.id})" title="編輯">✏️</button>
     <button class="bi d" onclick="delNote(${ui},${n.id})" title="刪除">✕</button>
@@ -1681,6 +1724,11 @@ function clearTangUnitSelection(){ selectedTangUnits.clear(); renderTangNotes();
 function toggleTangSelectMode(){
   tangSelectMode=!tangSelectMode;
   if(!tangSelectMode) selectedTangUnits.clear();
+  renderTangNotes();
+}
+function toggleTangNoteSelectMode(){
+  tangNoteSelectMode=!tangNoteSelectMode;
+  if(!tangNoteSelectMode) selectedNoteKeys.clear();
   renderTangNotes();
 }
 function batchSetMusicStatus(status){
@@ -1727,7 +1775,6 @@ function renderTangNotes(){
     $('tangnotes-hide-resolved').innerHTML='';
     renderTangNotesUnitView();
   } else {
-    $('tn-select-toggle-row').innerHTML='';
     renderTangNotesByCategoryView();
   }
 }
@@ -1747,6 +1794,7 @@ function renderTangNotesUnitView(){
       <button class="music-status-btn" onclick="batchSetMusicStatus('none')">❌ 設為尚無檔案</button>
       <button class="music-status-btn" onclick="batchSetMusicStatus('yellow')">🟡 設為需修改</button>
       <button class="music-status-btn" onclick="batchSetMusicStatus('green')">🟢 設為已有檔案</button>
+      <button class="music-status-btn" onclick="batchSetMusicStatus('na')">⚪ 設為不需檔案</button>
       <button class="btn-clear-lim" onclick="clearTangUnitSelection()">取消選取</button>
     </div>` : '';
 
@@ -1819,7 +1867,9 @@ function renderTangNotesByCategoryView(){
   let filtered=allNotes.filter(({n})=> !activeNoteCategory || n.category===activeNoteCategory );
   if(hideResolvedNotes) filtered=filtered.filter(({n})=>!n.resolved);
 
-  toolbar.innerHTML = selectedNoteKeys.size>0 ? `<div class="tang-toolbar">
+  $('tn-select-toggle-row').innerHTML = `<button class="btn-edit-u" onclick="toggleTangNoteSelectMode()">${tangNoteSelectMode?'✓ 完成選取':'☑️ 批次選取'}</button>`;
+
+  toolbar.innerHTML = (tangNoteSelectMode && selectedNoteKeys.size>0) ? `<div class="tang-toolbar">
       <span>已選 ${selectedNoteKeys.size} 筆筆記</span>
       <button class="music-status-btn" onclick="batchSetNotesResolved(true)">✓ 標記已解決</button>
       <button class="music-status-btn" onclick="batchSetNotesResolved(false)">↩ 取消已解決</button>
@@ -1830,7 +1880,7 @@ function renderTangNotesByCategoryView(){
 
   list.innerHTML=filtered.map(({ui,u,n})=>{
     const key=noteKey(ui,n.id);
-    return renderNoteRow(ui, n, { selectable:true, selected:selectedNoteKeys.has(key), showResolvedToggle:true, showUnitName:true, unitName:u.name });
+    return renderNoteRow(ui, n, { stacked:true, selectable:tangNoteSelectMode, selected:selectedNoteKeys.has(key), showResolvedToggle:true, showUnitName:true, unitName:u.name });
   }).join('');
 }
 
