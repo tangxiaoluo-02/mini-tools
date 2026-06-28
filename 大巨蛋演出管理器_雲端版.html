@@ -1365,17 +1365,23 @@ function renderUnits(){
     const cTag=categoryLabel(u.category);
 
     const headerHtml = isEditing
-      ? `<div class="unit-header">
-           <span class="expand-icon ${isOpen?'open':''}">▶</span>
-           <input id="ue-name-${ui}" class="unit-name-edit" value="${esc(u.name)}" maxlength="50"
-                  onclick="event.stopPropagation()"
-                  onkeydown="if(event.key==='Enter')confirmEditUnit(${ui})">
-           <button class="bi" onclick="event.stopPropagation();moveUnit(${ui},-1)" ${ui===0?'disabled':''} title="往上移">↑</button>
-           <button class="bi" onclick="event.stopPropagation();moveUnit(${ui}, 1)" ${ui===units.length-1?'disabled':''} title="往下移">↓</button>
-           <span class="unit-total">${fmtMs(total)}</span>
-           ${badge}
-           <button class="btn-done-u" onclick="event.stopPropagation();confirmEditUnit(${ui})">完成</button>
-           <button class="btn-del-u" onclick="event.stopPropagation();delUnit(${ui})">刪除</button>
+      ? `<div class="unit-header tn-stacked">
+           <div class="tn-row-top">
+             <span class="expand-icon ${isOpen?'open':''}">▶</span>
+             <input id="ue-name-${ui}" class="unit-name-edit" value="${esc(u.name)}" maxlength="50"
+                    onclick="event.stopPropagation()"
+                    onkeydown="if(event.key==='Enter')confirmEditUnit(${ui})">
+           </div>
+           <div class="tn-row-tags">
+             <button class="bi" onclick="event.stopPropagation();moveUnit(${ui},-1)" ${ui===0?'disabled':''} title="往上移">↑</button>
+             <button class="bi" onclick="event.stopPropagation();moveUnit(${ui}, 1)" ${ui===units.length-1?'disabled':''} title="往下移">↓</button>
+             <span class="unit-total">${fmtMs(total)}</span>
+             ${badge}
+           </div>
+           <div class="tn-row-tags">
+             <button class="btn-done-u" onclick="event.stopPropagation();confirmEditUnit(${ui})">完成</button>
+             <button class="btn-del-u" onclick="event.stopPropagation();delUnit(${ui})">刪除</button>
+           </div>
          </div>
          <div class="unit-edit-panel">
            <span class="ue-lbl">時間上限</span>
@@ -1422,17 +1428,23 @@ function renderUnits(){
            <input type="color" id="ue-color-${ui}" value="${u.highlightColor||'#2563eb'}" onclick="event.stopPropagation()" style="width:44px;height:32px;padding:2px;border:1.5px solid var(--border);border-radius:6px;cursor:pointer;">
            <span class="ue-lbl">不勾選就跟著唐團自動標色</span>
          </div>`
-      : `<div class="unit-header" onclick="toggleUnit(${ui})">
-           <span class="expand-icon ${isOpen?'open':''}">▶</span>
-           <span class="unit-name">${esc(u.name)}</span>
-           ${cTag}
-           ${dTag}
-           ${tTag}
-           ${limNote}
-           <span class="unit-total">${fmtMs(total)}</span>
-           ${badge}
-           <button class="btn-edit-u" onclick="event.stopPropagation();startEditUnit(${ui})">編輯</button>
-           <button class="btn-del-u"  onclick="event.stopPropagation();delUnit(${ui})">刪除</button>
+      : `<div class="unit-header tn-stacked" onclick="toggleUnit(${ui})">
+           <div class="tn-row-top">
+             <span class="expand-icon ${isOpen?'open':''}">▶</span>
+             <span class="unit-name">${esc(u.name)}</span>
+           </div>
+           <div class="tn-row-tags">
+             ${cTag}
+             ${dTag}
+             ${tTag}
+             ${limNote}
+           </div>
+           <div class="tn-row-tags">
+             <span class="unit-total">${fmtMs(total)}</span>
+             ${badge}
+             <button class="btn-edit-u" onclick="event.stopPropagation();startEditUnit(${ui})">編輯</button>
+             <button class="btn-del-u"  onclick="event.stopPropagation();delUnit(${ui})">刪除</button>
+           </div>
          </div>`;
 
     let itemClass='', itemStyle='';
