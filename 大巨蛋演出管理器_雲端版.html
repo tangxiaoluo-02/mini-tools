@@ -596,9 +596,17 @@
     <button class="day-tab" id="tangmode-unit-btn" onclick="setTangViewMode('unit')">依節目檢視</button>
     <button class="day-tab" id="tangmode-notes-btn" onclick="setTangViewMode('notes')">依筆記類別檢視</button>
   </div>
-  <div class="settings-row" style="margin-bottom:10px">
-    <input type="text" id="noteSearchInput" placeholder="🔍 搜尋筆記內容…" oninput="setNoteSearchQuery(this.value)">
+  <div class="settings-row" style="margin-bottom:6px">
+    <input type="text" id="noteSearchInput" placeholder="🔍 搜尋筆記內容…（可用 音樂 -已解決／音樂 OR 演員）" oninput="setNoteSearchQuery(this.value)">
     <button class="btn-clear-lim" onclick="clearNoteSearch()">清除</button>
+  </div>
+  <div class="save-hint" style="margin:0 0 10px">空格＝同時包含（AND）、前面加「-」＝不包含（NOT）、用「OR」連接＝符合任一個（OR），例：「音樂 -已解決」「音樂 OR 演員」</div>
+  <div class="settings-row" style="margin-bottom:10px">
+    <span class="ll">建立時間</span>
+    <input type="date" id="noteDateFromInput" onchange="setNoteDateRange()">
+    <span class="ll">～</span>
+    <input type="date" id="noteDateToInput" onchange="setNoteDateRange()">
+    <button class="btn-clear-lim" onclick="clearNoteDateRange()">清除日期</button>
   </div>
   <div id="tn-select-toggle-row" style="margin-bottom:10px"></div>
   <div id="tangnotes-toolbar"></div>
@@ -627,7 +635,9 @@ let openTangNote = -1;     // 唐團筆記頁面中展開的節目 index（對�
 let tangViewMode = 'unit'; // 'unit'=依節目檢視，'notes'=依筆記類別檢視
 let activeNoteCategory = ''; // 依筆記類別檢視時選定的類別，''=全部
 let hideResolvedNotes = false; // 是否隱藏已解決筆記
-let noteSearchQuery = ''; // 筆記搜尋關鍵字
+let noteSearchQuery = ''; // 筆記搜尋關鍵字（支援 AND/OR/NOT 語法）
+let noteDateFrom = ''; // 筆記建立時間篩選：起始日期 YYYY-MM-DD
+let noteDateTo = '';   // 筆記建立時間篩選：結束日期 YYYY-MM-DD
 let selectedTangUnits = new Set(); // 依節目檢視：勾選要批次設定音樂狀態的節目 index
 let tangSelectMode = false; // 依節目檢視：是否顯示批次選取勾選框
 let tangNoteSelectMode = false; // 依筆記類別檢視：是否顯示批次選取勾選框
@@ -679,7 +689,7 @@ function saveData(){
 
 /* ── 篩選狀態（分頁/開關）的記憶與同步 ── */
 function getFiltersSnapshot(){
-  return { activeDayTab, activeTeamTab, activeCategory, hideAllDayUnits, tangViewMode, activeNoteCategory, hideResolvedNotes, noteSearchQuery };
+  return { activeDayTab, activeTeamTab, activeCategory, hideAllDayUnits, tangViewMode, activeNoteCategory, hideResolvedNotes, noteSearchQuery, noteDateFrom, noteDateTo };
 }
 function applyFiltersSnapshot(f){
   if(!f) return;
@@ -691,6 +701,8 @@ function applyFiltersSnapshot(f){
   if(typeof f.activeNoteCategory==='string') activeNoteCategory=f.activeNoteCategory;
   if(typeof f.hideResolvedNotes==='boolean') hideResolvedNotes=f.hideResolvedNotes;
   if(typeof f.noteSearchQuery==='string') noteSearchQuery=f.noteSearchQuery;
+  if(typeof f.noteDateFrom==='string') noteDateFrom=f.noteDateFrom;
+  if(typeof f.noteDateTo==='string') noteDateTo=f.noteDateTo;
 }
 function loadFilters(){
   try {
@@ -1859,10 +1871,43 @@ function clearNoteSearch(){
   saveFilters();
   renderTangNotes();
 }
-function noteMatchesSearch(u, n){
-  if(!noteSearchQuery) return true;
-  const q=noteSearchQuery.toLowerCase();
-  return n.text.toLowerCase().includes(q) || n.category.toLowerCase().includes(q) || u.name.toLowerCase().includes(q);
+/* 搜尋語法：空格=AND、前面加「-」=NOT、用「OR」連接=OR（多組 AND 條件取任一組符合即可） */
+function parseSearchQuery(q){
+  if(!q || !q.trim()) return null;
+  return q.split(/\s+OR\s+/i).map(group=>{
+    const terms=group.trim().split(/\s+/).filter(Boolean);
+    const include=terms.filter(t=>!t.startsWith('-')).map(t=>t.toLowerCase());
+    const exclude=terms.filter(t=>t.startsWith('-')&&t.length>1).map(t=>t.slice(1).toLowerCase());
+    return { include, exclude };
+  });
+}
+function noteMatchesQuery(u, n, orGroups){
+  if(!orGroups) return true;
+  const haystack=`${n.text} ${n.category} ${u.name}`.toLowerCase();
+  return orGroups.some(({include,exclude})=>
+    include.every(t=>haystack.includes(t)) && exclude.every(t=>!haystack.includes(t))
+  );
+}
+function noteInDateRange(n){
+  if(!noteDateFrom && !noteDateTo) return true;
+  if(!n.ts) return false;
+  const d=n.ts.slice(0,10);
+  if(noteDateFrom && d<noteDateFrom) return false;
+  if(noteDateTo && d>noteDateTo) return false;
+  return true;
+}
+function setNoteDateRange(){
+  noteDateFrom=$('noteDateFromInput').value;
+  noteDateTo=$('noteDateToInput').value;
+  saveFilters();
+  renderTangNotes();
+}
+function clearNoteDateRange(){
+  noteDateFrom=''; noteDateTo='';
+  const fromEl=$('noteDateFromInput'), toEl=$('noteDateToInput');
+  if(fromEl) fromEl.value=''; if(toEl) toEl.value='';
+  saveFilters();
+  renderTangNotes();
 }
 
 /* ── 唐團筆記主渲染（依模式分派） ── */
@@ -1871,6 +1916,9 @@ function renderTangNotes(){
   $('tangmode-notes-btn').classList.toggle('active', tangViewMode==='notes');
   const searchEl=$('noteSearchInput');
   if(searchEl && searchEl.value!==noteSearchQuery) searchEl.value=noteSearchQuery;
+  const fromEl=$('noteDateFromInput'), toEl=$('noteDateToInput');
+  if(fromEl && fromEl.value!==noteDateFrom) fromEl.value=noteDateFrom;
+  if(toEl && toEl.value!==noteDateTo) toEl.value=noteDateTo;
   if(tangViewMode==='unit'){
     $('tangnotes-category-tabs').style.display='none';
     renderTangNotesUnitView();
@@ -1880,8 +1928,13 @@ function renderTangNotes(){
 }
 
 function renderTangNotesUnitView(){
+  const orGroups=parseSearchQuery(noteSearchQuery);
   let items=units.map((u,ui)=>({u,ui})).filter(({u})=>u.inTangNotes);
-  if(noteSearchQuery) items=items.filter(({u})=>(u.notes||[]).some(n=>noteMatchesSearch(u,n)));
+  if(orGroups || noteDateFrom || noteDateTo){
+    items=items.filter(({u})=>(u.notes||[]).some(n=>
+      (!hideResolvedNotes || !n.resolved) && noteMatchesQuery(u,n,orGroups) && noteInDateRange(n)
+    ));
+  }
   const list=$('tangnotes-list');
   const toolbar=$('tangnotes-toolbar');
   const cats=getNoteCategories();
@@ -1909,7 +1962,7 @@ function renderTangNotesUnitView(){
     const isOpen=openTangNote===ui;
     const allNotes=u.notes||[];
     let notes=hideResolvedNotes?allNotes.filter(n=>!n.resolved):allNotes;
-    if(noteSearchQuery) notes=notes.filter(n=>noteMatchesSearch(u,n));
+    notes=notes.filter(n=>noteMatchesQuery(u,n,orGroups) && noteInDateRange(n));
     const checked=selectedTangUnits.has(ui);
     const checkboxHtml = tangSelectMode
       ? `<input type="checkbox" onclick="event.stopPropagation();toggleSelectTangUnit(${ui})" ${checked?'checked':''}>`
@@ -1973,7 +2026,8 @@ function renderTangNotesByCategoryView(){
 
   let filtered=allNotes.filter(({n})=> !activeNoteCategory || n.category===activeNoteCategory );
   if(hideResolvedNotes) filtered=filtered.filter(({n})=>!n.resolved);
-  if(noteSearchQuery) filtered=filtered.filter(({u,n})=>noteMatchesSearch(u,n));
+  const orGroups=parseSearchQuery(noteSearchQuery);
+  filtered=filtered.filter(({u,n})=>noteMatchesQuery(u,n,orGroups) && noteInDateRange(n));
 
   $('tn-select-toggle-row').innerHTML = `<button class="btn-edit-u" onclick="toggleTangNoteSelectMode()">${tangNoteSelectMode?'✓ 完成選取':'☑️ 批次選取'}</button>`;
 
