@@ -101,16 +101,17 @@
     }
     .modal-box {
       background: #fff; border-radius: 14px; padding: 18px;
-      width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 10px;
+      width: 100%; max-width: 480px; height: 85vh; max-height: 700px;
+      display: flex; flex-direction: column; gap: 10px;
       box-shadow: 0 10px 40px rgba(0,0,0,.25);
     }
-    .modal-header { font-weight: 700; font-size: 1rem; color: var(--text); }
+    .modal-header { font-weight: 700; font-size: 1rem; color: var(--text); flex-shrink: 0; }
     .modal-cat-input {
       width: 100%; padding: 8px 10px; border: 1.5px solid var(--border); border-radius: 8px;
-      font-size: .9rem; color: var(--text); background: var(--inner);
+      font-size: .9rem; color: var(--text); background: var(--inner); flex-shrink: 0;
     }
     .modal-textarea {
-      width: 100%; min-height: 180px; padding: 10px; border: 1.5px solid var(--border);
+      width: 100%; flex: 1; min-height: 0; padding: 10px; border: 1.5px solid var(--border);
       border-radius: 8px; font-size: .95rem; font-family: inherit; resize: vertical;
       color: var(--text); background: var(--inner);
     }
@@ -631,6 +632,7 @@
 <div class="modal-overlay" id="note-edit-modal" style="display:none" onclick="if(event.target===this)cancelEditNote()">
   <div class="modal-box">
     <div class="modal-header">編輯筆記</div>
+    <select id="modalNoteUnit" class="modal-cat-input"></select>
     <input type="text" id="modalNoteCat" class="modal-cat-input" list="noteCategoryList" placeholder="類別（音樂／演員／影像…）">
     <textarea id="modalNoteText" class="modal-textarea" placeholder="輸入筆記內容…"></textarea>
     <div class="modal-actions">
@@ -1783,6 +1785,9 @@ function startEditNote(ui, id){
   const note=(units[ui].notes||[]).find(n=>n.id===id);
   if(!note) return;
   editingNote={ui,id};
+  const unitSel=$('modalNoteUnit');
+  unitSel.innerHTML=units.map((u,idx)=> u.inTangNotes ? `<option value="${idx}">${esc(u.name)}</option>` : '').join('');
+  unitSel.value=ui;
   $('modalNoteCat').value=note.category;
   $('modalNoteText').value=note.text;
   $('note-edit-modal').style.display='flex';
@@ -1801,6 +1806,12 @@ function confirmEditNote(){
   const text=$('modalNoteText').value.trim();
   if(!text){ warn('⚠️ 請輸入筆記內容'); return; }
   note.category=category; note.text=text;
+  const newUi=parseInt($('modalNoteUnit').value,10);
+  if(!isNaN(newUi) && newUi!==ui && units[newUi]){
+    units[ui].notes=(units[ui].notes||[]).filter(n=>n.id!==id);
+    if(!units[newUi].notes) units[newUi].notes=[];
+    units[newUi].notes.push(note);
+  }
   editingNote=null;
   $('note-edit-modal').style.display='none';
   saveData(); renderTangNotes();
