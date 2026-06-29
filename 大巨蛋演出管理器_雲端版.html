@@ -1849,7 +1849,6 @@ function renderTangNotes(){
   $('tangmode-notes-btn').classList.toggle('active', tangViewMode==='notes');
   if(tangViewMode==='unit'){
     $('tangnotes-category-tabs').style.display='none';
-    $('tangnotes-hide-resolved').innerHTML='';
     renderTangNotesUnitView();
   } else {
     renderTangNotesByCategoryView();
@@ -1866,6 +1865,10 @@ function renderTangNotesUnitView(){
 
   $('tn-select-toggle-row').innerHTML = `<button class="btn-edit-u" onclick="toggleTangSelectMode()">${tangSelectMode?'✓ 完成選取':'☑️ 批次選取'}</button>`;
 
+  $('tangnotes-hide-resolved').innerHTML=`<label class="day-chk" style="margin:10px 0 14px;display:inline-flex">
+    <input type="checkbox" id="hideResolvedChk" onchange="toggleHideResolvedNotes()" ${hideResolvedNotes?'checked':''}>隱藏已解決筆記
+  </label>`;
+
   toolbar.innerHTML = (tangSelectMode && selectedTangUnits.size>0) ? `<div class="tang-toolbar">
       <span>已選 ${selectedTangUnits.size} 個節目</span>
       <button class="music-status-btn" onclick="batchSetMusicStatus('none')">❌ 設為尚無檔案</button>
@@ -1879,14 +1882,15 @@ function renderTangNotesUnitView(){
   list.innerHTML=items.map(({u,ui})=>{
     const meta=MUSIC_STATUS_META[u.musicStatus||'none'];
     const isOpen=openTangNote===ui;
-    const notes=u.notes||[];
+    const allNotes=u.notes||[];
+    const notes=hideResolvedNotes?allNotes.filter(n=>!n.resolved):allNotes;
     const checked=selectedTangUnits.has(ui);
     const checkboxHtml = tangSelectMode
       ? `<input type="checkbox" onclick="event.stopPropagation();toggleSelectTangUnit(${ui})" ${checked?'checked':''}>`
       : '';
     const notesHtml=notes.length
       ? notes.map(n=>renderNoteRow(ui, n)).join('')
-      : '<div class="empty-hint" style="padding:8px 0">尚無筆記</div>';
+      : `<div class="empty-hint" style="padding:8px 0">${allNotes.length?'已解決筆記已隱藏':'尚無筆記'}</div>`;
     return `<div class="unit-item">
       <div class="unit-header tn-stacked" onclick="toggleTangNoteOpen(${ui})">
         <div class="tn-row-top">
