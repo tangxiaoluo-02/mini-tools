@@ -47,6 +47,15 @@
     .btn-settings:hover { background: var(--primary-l); }
     .btn-tangnotes { left: 0; right: auto; }
     .btn-tangnotes.active { background: var(--primary); border-color: var(--primary); }
+    .fab-add-note {
+      position: fixed; bottom: 22px; right: 18px; z-index: 900;
+      width: 54px; height: 54px; border-radius: 50%; border: none;
+      background: var(--primary); color: #fff; font-size: 1.3rem;
+      box-shadow: 0 4px 14px rgba(37,99,235,.45); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .fab-add-note:hover { background: var(--primary-h); }
+    .fab-add-note:active { transform: scale(.92); }
 
     .music-status-btn {
       background: none; border: 1px solid var(--border); border-radius: 20px;
@@ -72,6 +81,7 @@
       display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px;
       background: #fff; border: 1px solid var(--border-s); border-radius: 8px; margin-bottom: 6px;
     }
+    .note-cat-tags { display: flex; gap: 4px; flex-wrap: wrap; flex-shrink: 0; }
     .note-cat-tag {
       font-size: .7rem; font-weight: 700;
       padding: 2px 8px; border-radius: 10px; flex-shrink: 0; white-space: nowrap;
@@ -471,6 +481,7 @@
   <h1 id="app-h1">🎭 大巨蛋演出管理器</h1>
   <button class="btn-settings" onclick="toggleSettings()" title="設定">⚙️</button>
 </div>
+<button class="fab-add-note" onclick="quickAddNote()" title="快速新增筆記">📝➕</button>
 <div class="card settings-panel" id="settings-panel" style="display:none">
   <div class="sec-label">設定</div>
   <div class="settings-row">
@@ -631,15 +642,15 @@
 <!-- ── 筆記編輯彈窗 ── -->
 <div class="modal-overlay" id="note-edit-modal" style="display:none" onclick="if(event.target===this)cancelEditNote()">
   <div class="modal-box">
-    <div class="modal-header">編輯筆記</div>
+    <div class="modal-header" id="modalHeaderText">編輯筆記</div>
     <select id="modalNoteUnit" class="modal-cat-input"></select>
-    <input type="text" id="modalNoteCat" class="modal-cat-input" list="noteCategoryList" placeholder="類別（音樂／演員／影像…）">
+    <input type="text" id="modalNoteCat" class="modal-cat-input" list="noteCategoryList" placeholder="類別（可空格分隔多個，例：錄音 音樂）">
     <textarea id="modalNoteText" class="modal-textarea" placeholder="輸入筆記內容…"></textarea>
     <div class="modal-actions">
-      <button class="btn-del-u" onclick="deleteNoteFromModal()">刪除</button>
+      <button class="btn-del-u" id="modalDeleteBtn" onclick="deleteNoteFromModal()">刪除</button>
       <span style="flex:1"></span>
       <button class="btn-cx" onclick="cancelEditNote()">取消</button>
-      <button class="btn-ok" onclick="confirmEditNote()">儲存</button>
+      <button class="btn-ok" id="modalSaveBtn" onclick="confirmEditNote()">儲存</button>
     </div>
   </div>
 </div>
@@ -670,7 +681,8 @@ let selectedTangUnits = new Set(); // 依節目檢視：勾選要批次設定音
 let tangSelectMode = false; // 依節目檢視：是否顯示批次選取勾選框
 let tangNoteSelectMode = false; // 依筆記類別檢視：是否顯示批次選取勾選框
 let selectedNoteKeys = new Set();  // 依筆記類別檢視：勾選要批次標記已解決的筆記 key（`${ui}:${id}`）
-let editingNote = null; // {ui, id} 正在編輯的筆記
+let editingNote = null; // {ui, id} 正在編輯的筆記；null 且彈窗開啟中 = 新增模式
+let lastNoteUnit = null; // 上次快速新增筆記選的節目 index，方便連續新增同一節目時不用重選
 
 const TEAMS = ['唐團','優團','入經藏','法髓團'];
 const STORAGE_KEY = 'gigadome_units_v1';
@@ -1761,9 +1773,12 @@ function toggleTangNoteOpen(ui){
   openTangNote = openTangNote===ui ? -1 : ui;
   renderTangNotes();
 }
+function noteCategoriesOf(n){
+  return (n.category||'').split(/\s+/).filter(Boolean);
+}
 function getNoteCategories(){
   const set=new Set(['音樂','演員','影像']);
-  units.forEach(u=>(u.notes||[]).forEach(n=>set.add(n.category)));
+  units.forEach(u=>(u.notes||[]).forEach(n=>noteCategoriesOf(n).forEach(c=>set.add(c))));
   return [...set];
 }
 function noteKey(ui,id){ return `${ui}:${id}`; }
@@ -1790,6 +1805,22 @@ function startEditNote(ui, id){
   unitSel.value=ui;
   $('modalNoteCat').value=note.category;
   $('modalNoteText').value=note.text;
+  $('modalHeaderText').textContent='編輯筆記';
+  $('modalDeleteBtn').style.display='';
+  $('modalSaveBtn').textContent='儲存';
+  $('note-edit-modal').style.display='flex';
+  setTimeout(()=>$('modalNoteText').focus(),0);
+}
+function quickAddNote(){
+  editingNote=null;
+  const unitSel=$('modalNoteUnit');
+  unitSel.innerHTML=units.map((u,idx)=> u.inTangNotes ? `<option value="${idx}">${esc(u.name)}</option>` : '').join('');
+  if(lastNoteUnit!=null && units[lastNoteUnit] && units[lastNoteUnit].inTangNotes) unitSel.value=lastNoteUnit;
+  $('modalNoteCat').value='';
+  $('modalNoteText').value='';
+  $('modalHeaderText').textContent='新增筆記';
+  $('modalDeleteBtn').style.display='none';
+  $('modalSaveBtn').textContent='新增';
   $('note-edit-modal').style.display='flex';
   setTimeout(()=>$('modalNoteText').focus(),0);
 }
@@ -1798,19 +1829,28 @@ function cancelEditNote(){
   $('note-edit-modal').style.display='none';
 }
 function confirmEditNote(){
-  if(!editingNote) return;
-  const {ui,id}=editingNote;
-  const note=(units[ui].notes||[]).find(n=>n.id===id);
-  if(!note) return;
   const category=$('modalNoteCat').value.trim()||'其他';
   const text=$('modalNoteText').value.trim();
   if(!text){ warn('⚠️ 請輸入筆記內容'); return; }
-  note.category=category; note.text=text;
   const newUi=parseInt($('modalNoteUnit').value,10);
-  if(!isNaN(newUi) && newUi!==ui && units[newUi]){
-    units[ui].notes=(units[ui].notes||[]).filter(n=>n.id!==id);
+  if(isNaN(newUi) || !units[newUi]){ warn('⚠️ 請選擇節目'); return; }
+
+  if(!editingNote){
+    // 新增模式
     if(!units[newUi].notes) units[newUi].notes=[];
-    units[newUi].notes.push(note);
+    units[newUi].notes.push({ id:Date.now()+Math.random(), category, text, ts:new Date().toISOString(), resolved:false });
+    lastNoteUnit=newUi;
+  } else {
+    // 編輯模式
+    const {ui,id}=editingNote;
+    const note=(units[ui].notes||[]).find(n=>n.id===id);
+    if(!note) return;
+    note.category=category; note.text=text;
+    if(newUi!==ui){
+      units[ui].notes=(units[ui].notes||[]).filter(n=>n.id!==id);
+      if(!units[newUi].notes) units[newUi].notes=[];
+      units[newUi].notes.push(note);
+    }
   }
   editingNote=null;
   $('note-edit-modal').style.display='none';
@@ -1823,8 +1863,14 @@ function deleteNoteFromModal(){
   $('note-edit-modal').style.display='none';
   delNote(ui,id);
 }
+function renderNoteCatTags(n){
+  return noteCategoriesOf(n).map(c=>{
+    const cc=noteCategoryColor(c);
+    return `<span class="note-cat-tag" style="background:${cc.bg};color:${cc.fg}">${esc(c)}</span>`;
+  }).join('');
+}
 function renderNoteRow(ui, n, opts={}){
-  const catColor=noteCategoryColor(n.category);
+  const catTags=renderNoteCatTags(n);
 
   if(opts.stacked){
     const selectBox = opts.selectable ? `<input type="checkbox" ${opts.selected?'checked':''} onclick="toggleSelectNote(${ui},${n.id})">` : '';
@@ -1834,7 +1880,7 @@ function renderNoteRow(ui, n, opts={}){
     return `<div class="note-item note-stacked">
       <div class="note-row-top">
         ${selectBox}
-        <span class="note-cat-tag" style="background:${catColor.bg};color:${catColor.fg}">${esc(n.category)}</span>
+        <span class="note-cat-tags">${catTags}</span>
         <span class="note-text${n.resolved?' note-resolved':''}" style="flex:1">${esc(n.text)}</span>
       </div>
       <div class="note-row-bottom">
@@ -1848,7 +1894,7 @@ function renderNoteRow(ui, n, opts={}){
 
   const resolvedPart = n.resolved?'<span class="badge ok" style="flex-shrink:0">已解決</span>':'';
   return `<div class="note-item">
-    <span class="note-cat-tag" style="background:${catColor.bg};color:${catColor.fg}">${esc(n.category)}</span>
+    <span class="note-cat-tags">${catTags}</span>
     <span class="note-text${n.resolved?' note-resolved':''}" style="flex:1">${esc(n.text)}</span>
     ${resolvedPart}
     <button class="bi" onclick="startEditNote(${ui},${n.id})" title="編輯">✏️</button>
@@ -2070,7 +2116,7 @@ function renderTangNotesByCategoryView(){
     <input type="checkbox" id="hideResolvedChk" onchange="toggleHideResolvedNotes()" ${hideResolvedNotes?'checked':''}>隱藏已解決筆記
   </label>`;
 
-  let filtered=allNotes.filter(({n})=> !activeNoteCategory || n.category===activeNoteCategory );
+  let filtered=allNotes.filter(({n})=> !activeNoteCategory || noteCategoriesOf(n).includes(activeNoteCategory) );
   if(hideResolvedNotes) filtered=filtered.filter(({n})=>!n.resolved);
   const orGroups=parseSearchQuery(noteSearchQuery);
   filtered=filtered.filter(({u,n})=>noteMatchesQuery(u,n,orGroups) && noteInDateRange(n));
