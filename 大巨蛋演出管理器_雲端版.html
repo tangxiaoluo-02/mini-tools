@@ -596,6 +596,10 @@
     <button class="day-tab" id="tangmode-unit-btn" onclick="setTangViewMode('unit')">依節目檢視</button>
     <button class="day-tab" id="tangmode-notes-btn" onclick="setTangViewMode('notes')">依筆記類別檢視</button>
   </div>
+  <div class="settings-row" style="margin-bottom:10px">
+    <input type="text" id="noteSearchInput" placeholder="🔍 搜尋筆記內容…" oninput="setNoteSearchQuery(this.value)">
+    <button class="btn-clear-lim" onclick="clearNoteSearch()">清除</button>
+  </div>
   <div id="tn-select-toggle-row" style="margin-bottom:10px"></div>
   <div id="tangnotes-toolbar"></div>
   <div id="tangnotes-category-tabs" class="day-tabs"></div>
@@ -623,6 +627,7 @@ let openTangNote = -1;     // 唐團筆記頁面中展開的節目 index（對�
 let tangViewMode = 'unit'; // 'unit'=依節目檢視，'notes'=依筆記類別檢視
 let activeNoteCategory = ''; // 依筆記類別檢視時選定的類別，''=全部
 let hideResolvedNotes = false; // 是否隱藏已解決筆記
+let noteSearchQuery = ''; // 筆記搜尋關鍵字
 let selectedTangUnits = new Set(); // 依節目檢視：勾選要批次設定音樂狀態的節目 index
 let tangSelectMode = false; // 依節目檢視：是否顯示批次選取勾選框
 let tangNoteSelectMode = false; // 依筆記類別檢視：是否顯示批次選取勾選框
@@ -674,7 +679,7 @@ function saveData(){
 
 /* ── 篩選狀態（分頁/開關）的記憶與同步 ── */
 function getFiltersSnapshot(){
-  return { activeDayTab, activeTeamTab, activeCategory, hideAllDayUnits, tangViewMode, activeNoteCategory, hideResolvedNotes };
+  return { activeDayTab, activeTeamTab, activeCategory, hideAllDayUnits, tangViewMode, activeNoteCategory, hideResolvedNotes, noteSearchQuery };
 }
 function applyFiltersSnapshot(f){
   if(!f) return;
@@ -685,6 +690,7 @@ function applyFiltersSnapshot(f){
   if(typeof f.tangViewMode==='string') tangViewMode=f.tangViewMode;
   if(typeof f.activeNoteCategory==='string') activeNoteCategory=f.activeNoteCategory;
   if(typeof f.hideResolvedNotes==='boolean') hideResolvedNotes=f.hideResolvedNotes;
+  if(typeof f.noteSearchQuery==='string') noteSearchQuery=f.noteSearchQuery;
 }
 function loadFilters(){
   try {
@@ -1842,11 +1848,29 @@ function toggleHideResolvedNotes(){
   saveFilters();
   renderTangNotes();
 }
+function setNoteSearchQuery(v){
+  noteSearchQuery=v;
+  saveFilters();
+  renderTangNotes();
+}
+function clearNoteSearch(){
+  noteSearchQuery='';
+  const el=$('noteSearchInput'); if(el) el.value='';
+  saveFilters();
+  renderTangNotes();
+}
+function noteMatchesSearch(u, n){
+  if(!noteSearchQuery) return true;
+  const q=noteSearchQuery.toLowerCase();
+  return n.text.toLowerCase().includes(q) || n.category.toLowerCase().includes(q) || u.name.toLowerCase().includes(q);
+}
 
 /* ── 唐團筆記主渲染（依模式分派） ── */
 function renderTangNotes(){
   $('tangmode-unit-btn').classList.toggle('active', tangViewMode==='unit');
   $('tangmode-notes-btn').classList.toggle('active', tangViewMode==='notes');
+  const searchEl=$('noteSearchInput');
+  if(searchEl && searchEl.value!==noteSearchQuery) searchEl.value=noteSearchQuery;
   if(tangViewMode==='unit'){
     $('tangnotes-category-tabs').style.display='none';
     renderTangNotesUnitView();
@@ -1856,7 +1880,8 @@ function renderTangNotes(){
 }
 
 function renderTangNotesUnitView(){
-  const items=units.map((u,ui)=>({u,ui})).filter(({u})=>u.inTangNotes);
+  let items=units.map((u,ui)=>({u,ui})).filter(({u})=>u.inTangNotes);
+  if(noteSearchQuery) items=items.filter(({u})=>(u.notes||[]).some(n=>noteMatchesSearch(u,n)));
   const list=$('tangnotes-list');
   const toolbar=$('tangnotes-toolbar');
   const cats=getNoteCategories();
@@ -1883,7 +1908,8 @@ function renderTangNotesUnitView(){
     const meta=MUSIC_STATUS_META[u.musicStatus||'none'];
     const isOpen=openTangNote===ui;
     const allNotes=u.notes||[];
-    const notes=hideResolvedNotes?allNotes.filter(n=>!n.resolved):allNotes;
+    let notes=hideResolvedNotes?allNotes.filter(n=>!n.resolved):allNotes;
+    if(noteSearchQuery) notes=notes.filter(n=>noteMatchesSearch(u,n));
     const checked=selectedTangUnits.has(ui);
     const checkboxHtml = tangSelectMode
       ? `<input type="checkbox" onclick="event.stopPropagation();toggleSelectTangUnit(${ui})" ${checked?'checked':''}>`
@@ -1947,6 +1973,7 @@ function renderTangNotesByCategoryView(){
 
   let filtered=allNotes.filter(({n})=> !activeNoteCategory || n.category===activeNoteCategory );
   if(hideResolvedNotes) filtered=filtered.filter(({n})=>!n.resolved);
+  if(noteSearchQuery) filtered=filtered.filter(({u,n})=>noteMatchesSearch(u,n));
 
   $('tn-select-toggle-row').innerHTML = `<button class="btn-edit-u" onclick="toggleTangNoteSelectMode()">${tangNoteSelectMode?'✓ 完成選取':'☑️ 批次選取'}</button>`;
 
