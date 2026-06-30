@@ -1100,7 +1100,7 @@ async function syncDownloadIfNewer(){
 }
 function manualSync(){
   let hasSyncedBefore=''; try{ hasSyncedBefore=localStorage.getItem(SYNC_TIME_KEY)||''; }catch(e){}
-  if(hasSyncedBefore) syncDownloadIfNewer();
+  if(hasSyncedBefore) syncMergeUpload();
   else setSyncStatus('⚠️ 還沒首次同步過，請用下方「⬆️ 上傳本機到雲端」或「⬇️ 從雲端下載」');
 }
 function resetToDefault(){
@@ -2240,7 +2240,8 @@ document.addEventListener('keydown',e=>{
 loadTitle(); loadSyncUrl(); loadData(); loadFilters(); renderCur(); renderUnits();
 if(syncUrl){
   let hasSyncedBefore=''; try{ hasSyncedBefore=localStorage.getItem(SYNC_TIME_KEY)||''; }catch(e){}
-  if(hasSyncedBefore) syncDownloadIfNewer();
+  // 每次開啟頁面都做合併上傳，確保跨裝置的筆記都能互相補入
+  if(hasSyncedBefore) syncMergeUpload();
   else setSyncStatus('⚠️ 還沒首次同步過，請選擇下方「⬆️ 上傳本機到雲端」或「⬇️ 從雲端下載」');
 }
 </script>
