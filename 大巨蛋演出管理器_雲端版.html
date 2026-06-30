@@ -903,7 +903,7 @@ function saveSyncUrl(){
     warn('✅ 已儲存同步網址');
     let hasSyncedBefore=''; try{ hasSyncedBefore=localStorage.getItem(SYNC_TIME_KEY)||''; }catch(e){}
     if(hasSyncedBefore){
-      syncDownloadIfNewer();
+      syncMergeUpload();
     } else {
       setSyncStatus('⚠️ 第一次連這個雲端網址，請選擇下方「⬆️ 上傳本機到雲端」或「⬇️ 從雲端下載」');
     }
@@ -948,12 +948,101 @@ function fmtSyncTime(iso){
   if(isNaN(d.getTime())) return '';
   return `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
 }
+
+/* ── 合併邏輯：讓多裝置同時新增筆記不互相覆蓋 ── */
+// 擷取筆記的「主要內容」，去掉已附加的其他裝置舊版本段落（防止重複疊加）
+function noteMainText(text){
+  return (text||'').replace(/\n\n==其他裝置：[\s\S]*$/, '').trim();
+}
+function fmtConflictTime(iso){
+  if(!iso) return '未知時間';
+  const d=new Date(iso);
+  if(isNaN(d.getTime())) return iso;
+  const mm=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
+  const hh=String(d.getHours()).padStart(2,'0'), mi=String(d.getMinutes()).padStart(2,'0');
+  return `${mm}/${dd} ${hh}:${mi}`;
+}
+function mergeNotes(localNotes, cloudNotes) {
+  const map = {};
+  // 先放雲端筆記作為基礎
+  (cloudNotes || []).forEach(n => { if(n.id != null) map[String(n.id)] = n; });
+  // 本機筆記：新 ID 直接加入；相同 ID 比較 updatedAt（沒有則用 ts）決定新舊
+  (localNotes || []).forEach(n => {
+    const key = String(n.id ?? (Date.now() + Math.random()));
+    const existing = map[key];
+    if(!existing){ map[key] = n; return; }
+    const localTime = n.updatedAt || n.ts || '';
+    const cloudTime = existing.updatedAt || existing.ts || '';
+    if(localTime === cloudTime){ map[key] = n; return; } // 同版本，保留本機
+    // 有衝突：新版當主體，舊版內容附在下方供參考
+    const [newer, older] = localTime > cloudTime ? [n, existing] : [existing, n];
+    const newerMain = noteMainText(newer.text);
+    const olderMain = noteMainText(older.text);
+    const mergedText = newerMain === olderMain
+      ? newerMain
+      : `${newerMain}\n\n==其他裝置：${fmtConflictTime(older.updatedAt||older.ts)}==\n${olderMain}`;
+    map[key] = { ...newer, text: mergedText };
+  });
+  return Object.values(map).sort((a,b) => (a.ts||'') < (b.ts||'') ? -1 : 1);
+}
+function mergeUnitsData(localUnits, cloudUnits) {
+  const cloudMap = {};
+  (cloudUnits || []).forEach(u => { cloudMap[u.name] = u; });
+  const localMap = {};
+  (localUnits || []).forEach(u => { localMap[u.name] = u; });
+  // 以本機的節目順序為主，逐一合併筆記
+  const result = (localUnits || []).map(u => {
+    const cu = cloudMap[u.name];
+    if(!cu) return u;
+    return { ...u, notes: mergeNotes(u.notes || [], cu.notes || []) };
+  });
+  // 雲端有、本機沒有的節目（通常不會發生，但保險起見加在最後）
+  (cloudUnits || []).forEach(cu => { if(!localMap[cu.name]) result.push(cu); });
+  return result;
+}
+
+/* 合併上傳：先拉雲端 → 合併 → 上傳合併結果 → 更新本機 */
+async function syncMergeUpload(){
+  if(!syncUrl) return;
+  setSyncStatus('☁️ 同步中…');
+  try {
+    // 1. 拉取雲端現況
+    const getRes = await fetch(syncUrl);
+    const getJson = await getRes.json();
+    const cloud = getJson.data;
+    // 2. 合併本機與雲端
+    let merged = units;
+    if(cloud && Array.isArray(cloud.units) && cloud.units.length){
+      merged = mergeUnitsData(units, cloud.units);
+    }
+    // 3. 上傳合併後資料
+    const payload = { units: merged, appTitle, filters: getFiltersSnapshot() };
+    const postRes = await fetch(syncUrl, {
+      method:'POST',
+      headers:{ 'Content-Type':'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+    const postJson = await postRes.json();
+    const t = postJson.updatedAt || new Date().toISOString();
+    // 4. 更新本機為合併結果
+    units = merged;
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(units));
+      localStorage.setItem(SYNC_TIME_KEY, t);
+    } catch(e){}
+    rerenderAll();
+    setSyncStatus(`☁️ 已同步 ${fmtSyncTime(t)}`);
+  } catch(err){
+    setSyncStatus('⚠️ 同步失敗，請檢查網路');
+  }
+}
+
 function scheduleSync(){
   if(!syncUrl) return;
   let hasSyncedBefore=''; try{ hasSyncedBefore=localStorage.getItem(SYNC_TIME_KEY)||''; }catch(e){}
   if(!hasSyncedBefore) return; // 還沒首次同步過，不自動上傳，避免搶在使用者選擇方向前覆蓋雲端
   clearTimeout(syncTimer);
-  syncTimer=setTimeout(syncUpload, 1500);
+  syncTimer=setTimeout(syncMergeUpload, 1500); // 合併上傳，不覆蓋雲端其他裝置的資料
 }
 function rerenderAll(){
   renderTitle();
@@ -987,7 +1076,9 @@ async function syncDownloadIfNewer(){
     const cloud=json.data, cloudTime=json.updatedAt||'';
     let localTime=''; try{ localTime=localStorage.getItem(SYNC_TIME_KEY)||''; }catch(e){}
     if(cloud && Array.isArray(cloud.units) && cloud.units.length && (!localTime || cloudTime>localTime)){
-      units=cloud.units;
+      // 合併（不再整包覆蓋），把雲端有而本機沒有的筆記補進來
+      const merged = mergeUnitsData(units, cloud.units);
+      units = merged;
       if(cloud.appTitle) appTitle=cloud.appTitle;
       applyFiltersSnapshot(cloud.filters);
       try {
@@ -999,7 +1090,7 @@ async function syncDownloadIfNewer(){
       rerenderAll();
       setSyncStatus(`☁️ 已從雲端更新（${fmtSyncTime(cloudTime)}）`);
     } else if(!cloud || !cloud.units || !cloud.units.length){
-      await syncUpload();
+      await syncMergeUpload();
     } else {
       setSyncStatus(`☁️ 已是最新（${fmtSyncTime(localTime||cloudTime)}）`);
     }
@@ -1788,7 +1879,8 @@ function addNote(ui){
   const text=textEl.value.trim();
   if(!text){ warn('⚠️ 請輸入筆記內容'); return; }
   if(!units[ui].notes) units[ui].notes=[];
-  units[ui].notes.push({ id:Date.now()+Math.random(), category, text, ts:new Date().toISOString(), resolved:false });
+  const now=new Date().toISOString();
+  units[ui].notes.push({ id:Date.now()+Math.random(), category, text, ts:now, updatedAt:now, resolved:false });
   saveData(); renderTangNotes();
 }
 function delNote(ui, id){
@@ -1835,17 +1927,18 @@ function confirmEditNote(){
   const newUi=parseInt($('modalNoteUnit').value,10);
   if(isNaN(newUi) || !units[newUi]){ warn('⚠️ 請選擇節目'); return; }
 
+  const now=new Date().toISOString();
   if(!editingNote){
     // 新增模式
     if(!units[newUi].notes) units[newUi].notes=[];
-    units[newUi].notes.push({ id:Date.now()+Math.random(), category, text, ts:new Date().toISOString(), resolved:false });
+    units[newUi].notes.push({ id:Date.now()+Math.random(), category, text, ts:now, updatedAt:now, resolved:false });
     lastNoteUnit=newUi;
   } else {
     // 編輯模式
     const {ui,id}=editingNote;
     const note=(units[ui].notes||[]).find(n=>n.id===id);
     if(!note) return;
-    note.category=category; note.text=text;
+    note.category=category; note.text=text; note.updatedAt=now;
     if(newUi!==ui){
       units[ui].notes=(units[ui].notes||[]).filter(n=>n.id!==id);
       if(!units[newUi].notes) units[newUi].notes=[];
@@ -1926,7 +2019,7 @@ function batchSetMusicStatus(status){
 /* ── 批次：筆記已解決（依筆記類別檢視） ── */
 function toggleNoteResolved(ui,id){
   const note=(units[ui].notes||[]).find(n=>n.id===id);
-  if(note) note.resolved=!note.resolved;
+  if(note){ note.resolved=!note.resolved; note.updatedAt=new Date().toISOString(); }
   saveData(); renderTangNotes();
 }
 function toggleSelectNote(ui,id){
