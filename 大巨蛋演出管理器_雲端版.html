@@ -502,6 +502,7 @@
   <div class="save-hint">💡 第一次連同一個雲端網址時，請手動選「上傳」或「下載」決定方向；之後重新整理頁面會自動比對較新版本，不用每次手動選</div>
   <div class="settings-row" style="margin-top:10px">
     <button class="btn-backup btn-bk-export" onclick="manualSync()">🔄 立即同步（已同步過才能用）</button>
+    <button class="btn-backup btn-bk-export" id="autoSyncBtn" onclick="toggleAutoSync()">🔄 自動輪詢：已關閉</button>
   </div>
   <div class="settings-row" style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--border)">
     <button class="btn-backup btn-bk-export" onclick="resetToDefault()">🔄 重置為預設節目單</button>
@@ -691,8 +692,12 @@ const TITLE_KEY = 'gigadome_title_v1';
 const FILTERS_KEY = 'gigadome_filters_v1';
 const SYNC_URL_KEY = 'gigadome_sync_url_v1';
 const SYNC_TIME_KEY = 'gigadome_sync_time_v1';
+const AUTOSYNC_KEY = 'gigadome_autosync_v1';
+const POLL_INTERVAL = 15000; // 15 秒輪詢一次
 let syncUrl = '';
 let syncTimer = null;
+let pollTimer = null;
+let autoSyncEnabled = false;
 const MUSIC_STATUS_META = {
   none:   { icon:'❌', label:'尚無檔案' },
   yellow: { icon:'🟡', label:'已有檔案、需修改' },
@@ -890,6 +895,48 @@ function saveTitle(){
   $('settings-panel').style.display = 'none';
   warn('✅ 名稱已更新');
   scheduleSync();
+}
+
+/* ── 自動輪詢 ── */
+function loadAutoSync(){
+  try { autoSyncEnabled = localStorage.getItem(AUTOSYNC_KEY) === 'true'; } catch(e){}
+}
+function saveAutoSync(){
+  try { localStorage.setItem(AUTOSYNC_KEY, autoSyncEnabled ? 'true' : 'false'); } catch(e){}
+}
+function startPolling(){
+  if(pollTimer) return;
+  if(!syncUrl) return;
+  let hasSyncedBefore=''; try{ hasSyncedBefore=localStorage.getItem(SYNC_TIME_KEY)||''; }catch(e){}
+  if(!hasSyncedBefore) return;
+  pollTimer = setInterval(syncMergeUpload, POLL_INTERVAL);
+}
+function stopPolling(){
+  if(pollTimer){ clearInterval(pollTimer); pollTimer=null; }
+}
+function enableAutoSync(){
+  if(autoSyncEnabled) return;
+  autoSyncEnabled = true;
+  saveAutoSync();
+  startPolling();
+  updateAutoSyncUI();
+}
+function toggleAutoSync(){
+  autoSyncEnabled = !autoSyncEnabled;
+  saveAutoSync();
+  autoSyncEnabled ? startPolling() : stopPolling();
+  updateAutoSyncUI();
+}
+function updateAutoSyncUI(){
+  const btn=$('autoSyncBtn');
+  if(!btn) return;
+  if(autoSyncEnabled){
+    btn.textContent='🔄 自動輪詢：開啟中 ✓';
+    btn.style.cssText='background:var(--green-bg);border-color:var(--green);color:var(--green)';
+  } else {
+    btn.textContent='🔄 自動輪詢：已關閉';
+    btn.style.cssText='';
+  }
 }
 
 /* ── 雲端同步（GAS Web App） ── */
@@ -1882,6 +1929,7 @@ function addNote(ui){
   if(!units[ui].notes) units[ui].notes=[];
   const now=new Date().toISOString();
   units[ui].notes.push({ id:Date.now()+Math.random(), category, text, ts:now, updatedAt:now, resolved:false });
+  if(syncUrl) enableAutoSync();
   saveData(); renderTangNotes();
 }
 function delNote(ui, id){
@@ -1948,6 +1996,7 @@ function confirmEditNote(){
   }
   editingNote=null;
   $('note-edit-modal').style.display='none';
+  if(syncUrl) enableAutoSync();
   saveData(); renderTangNotes();
 }
 function deleteNoteFromModal(){
@@ -2021,6 +2070,7 @@ function batchSetMusicStatus(status){
 function toggleNoteResolved(ui,id){
   const note=(units[ui].notes||[]).find(n=>n.id===id);
   if(note){ note.resolved=!note.resolved; note.updatedAt=new Date().toISOString(); }
+  if(syncUrl) enableAutoSync();
   saveData(); renderTangNotes();
 }
 function toggleSelectNote(ui,id){
@@ -2249,13 +2299,17 @@ document.addEventListener('keydown',e=>{
 });
 
 /* ── 初始化：從 localStorage 讀取 ── */
-loadTitle(); loadSyncUrl(); loadData(); loadFilters(); renderCur(); renderUnits();
+loadTitle(); loadSyncUrl(); loadAutoSync(); loadData(); loadFilters(); renderCur(); renderUnits();
 if(syncUrl){
   let hasSyncedBefore=''; try{ hasSyncedBefore=localStorage.getItem(SYNC_TIME_KEY)||''; }catch(e){}
-  // 每次開啟頁面都做合併上傳，確保跨裝置的筆記都能互相補入
-  if(hasSyncedBefore) syncMergeUpload();
-  else setSyncStatus('⚠️ 還沒首次同步過，請選擇下方「⬆️ 上傳本機到雲端」或「⬇️ 從雲端下載」');
+  if(hasSyncedBefore){
+    syncMergeUpload(); // 每次開頁面先做一次合併
+    if(autoSyncEnabled) startPolling(); // 若上次有開輪詢，繼續輪詢
+  } else {
+    setSyncStatus('⚠️ 還沒首次同步過，請選擇下方「⬆️ 上傳本機到雲端」或「⬇️ 從雲端下載」');
+  }
 }
+updateAutoSyncUI();
 </script>
 </body>
 </html>
