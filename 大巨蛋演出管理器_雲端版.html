@@ -677,6 +677,7 @@ let hideResolvedNotes = false; // 是否隱藏已解決筆記
 let noteSearchQuery = ''; // 筆記搜尋關鍵字（支援 AND/OR/NOT 語法）
 let noteDateFrom = ''; // 筆記建立時間篩選：起始日期 YYYY-MM-DD
 let noteDateTo = '';   // 筆記建立時間篩選：結束日期 YYYY-MM-DD
+let notesSortByTime = false; // true=依建立時間排序（最新優先）；false=依節目順序
 let selectedTangUnits = new Set(); // 依節目檢視：勾選要批次設定音樂狀態的節目 index
 let tangSelectMode = false; // 依節目檢視：是否顯示批次選取勾選框
 let tangNoteSelectMode = false; // 依筆記類別檢視：是否顯示批次選取勾選框
@@ -2094,6 +2095,10 @@ function clearNoteDateRange(){
   saveFilters();
   renderTangNotes();
 }
+function toggleNotesSortByTime(){
+  notesSortByTime=!notesSortByTime;
+  renderTangNotes();
+}
 
 /* ── 唐團筆記主渲染（依模式分派） ── */
 function renderTangNotes(){
@@ -2205,14 +2210,21 @@ function renderTangNotesByCategoryView(){
     return `<button class="day-tab${active?' active':''}" style="${style}" onclick="setNoteCategoryTab('${val.replace(/'/g,"\\'")}')">${l}</button>`;
   }).join('');
 
-  hideEl.innerHTML=`<label class="day-chk" style="margin:10px 0 14px;display:inline-flex">
-    <input type="checkbox" id="hideResolvedChk" onchange="toggleHideResolvedNotes()" ${hideResolvedNotes?'checked':''}>隱藏已解決筆記
-  </label>`;
+  hideEl.innerHTML=`<div style="display:flex;align-items:center;gap:12px;margin:10px 0 14px;flex-wrap:wrap">
+    <label class="day-chk" style="display:inline-flex">
+      <input type="checkbox" id="hideResolvedChk" onchange="toggleHideResolvedNotes()" ${hideResolvedNotes?'checked':''}>隱藏已解決筆記
+    </label>
+    <button class="music-status-btn${notesSortByTime?' active':'‌'}" onclick="toggleNotesSortByTime()"
+      style="${notesSortByTime?'background:var(--primary);color:#fff;border-color:var(--primary)':''}">
+      🕐 依時間排序${notesSortByTime?' ✓':''}
+    </button>
+  </div>`;
 
   let filtered=allNotes.filter(({n})=> !activeNoteCategory || noteCategoriesOf(n).includes(activeNoteCategory) );
   if(hideResolvedNotes) filtered=filtered.filter(({n})=>!n.resolved);
   const orGroups=parseSearchQuery(noteSearchQuery);
   filtered=filtered.filter(({u,n})=>noteMatchesQuery(u,n,orGroups) && noteInDateRange(n));
+  if(notesSortByTime) filtered.sort((a,b)=>(b.n.ts||'') < (a.n.ts||'') ? -1 : 1);
 
   $('tn-select-toggle-row').innerHTML = `<button class="btn-edit-u" onclick="toggleTangNoteSelectMode()">${tangNoteSelectMode?'✓ 完成選取':'☑️ 批次選取'}</button>`;
 
