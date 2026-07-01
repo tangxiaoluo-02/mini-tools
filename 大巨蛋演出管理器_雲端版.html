@@ -508,6 +508,13 @@
     <button class="btn-backup btn-bk-export" onclick="resetToDefault()">🔄 重置為預設節目單</button>
   </div>
   <div class="save-hint">⚠️ 會清除目前所有節目，換成程式內建的 85 個預設節目單（建議先匯出備份再重置）</div>
+  <div class="settings-row" style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--border)">
+    <button class="btn-backup btn-bk-export" onclick="exportJSON()">💾 匯出備份 (.json)</button>
+    <label class="btn-backup btn-bk-import" style="cursor:pointer;">
+      📂 匯入備份
+      <input type="file" accept=".json" onchange="importJSON(this)" style="display:none">
+    </label>
+  </div>
 </div>
 
 <div id="section-build">
@@ -601,12 +608,7 @@
   <div id="budget-row" style="display:none"></div>
   <div id="unit-list"><div class="empty-hint">尚無儲存的節目</div></div>
   <button class="btn-export" id="export-btn" onclick="exportText()" style="display:none">📋 複製摘要到剪貼簿</button>
-  <div class="backup-row">
-    <button class="btn-backup btn-bk-export" onclick="exportJSON()">💾 匯出備份 (.json)</button>
-    <label class="btn-backup btn-bk-import" style="cursor:pointer;">
-      📂 匯入備份
-      <input type="file" accept=".json" onchange="importJSON(this)" style="display:none">
-    </label>
+  <div style="text-align:right;padding-right:4px">
     <span class="auto-save-badge" id="save-badge">✓ 已自動儲存</span>
   </div>
 </div>
@@ -693,11 +695,13 @@ const FILTERS_KEY = 'gigadome_filters_v1';
 const SYNC_URL_KEY = 'gigadome_sync_url_v1';
 const SYNC_TIME_KEY = 'gigadome_sync_time_v1';
 const AUTOSYNC_KEY = 'gigadome_autosync_v1';
+const DELETED_NOTES_KEY = 'gigadome_deleted_notes_v1';
 const POLL_INTERVAL = 15000; // 15 秒輪詢一次
 let syncUrl = '';
 let syncTimer = null;
 let pollTimer = null;
 let autoSyncEnabled = false;
+let deletedNoteIds = new Set(); // 已刪除筆記的 ID tombstone，防止輪詢時從雲端被復活
 const MUSIC_STATUS_META = {
   none:   { icon:'❌', label:'尚無檔案' },
   yellow: { icon:'🟡', label:'已有檔案、需修改' },
@@ -898,6 +902,15 @@ function saveTitle(){
 }
 
 /* ── 自動輪詢 ── */
+function loadDeletedNoteIds(){
+  try {
+    const arr = JSON.parse(localStorage.getItem(DELETED_NOTES_KEY) || '[]');
+    deletedNoteIds = new Set(arr.map(String));
+  } catch(e){ deletedNoteIds = new Set(); }
+}
+function saveDeletedNoteIds(){
+  try { localStorage.setItem(DELETED_NOTES_KEY, JSON.stringify([...deletedNoteIds])); } catch(e){}
+}
 function loadAutoSync(){
   try { autoSyncEnabled = localStorage.getItem(AUTOSYNC_KEY) === 'true'; } catch(e){}
 }
@@ -1010,13 +1023,18 @@ function fmtConflictTime(iso){
   const hh=String(d.getHours()).padStart(2,'0'), mi=String(d.getMinutes()).padStart(2,'0');
   return `${mm}/${dd} ${hh}:${mi}`;
 }
-function mergeNotes(localNotes, cloudNotes) {
+function mergeNotes(localNotes, cloudNotes, delIds) {
   const map = {};
-  // 先放雲端筆記作為基礎
-  (cloudNotes || []).forEach(n => { if(n.id != null) map[String(n.id)] = n; });
+  // 先放雲端筆記（已刪除的直接跳過）
+  (cloudNotes || []).forEach(n => {
+    if(n.id == null) return;
+    if(delIds && delIds.has(String(n.id))) return;
+    map[String(n.id)] = n;
+  });
   // 本機筆記：新 ID 直接加入；相同 ID 比較 updatedAt（沒有則用 ts）決定新舊
   (localNotes || []).forEach(n => {
     const key = String(n.id ?? (Date.now() + Math.random()));
+    if(delIds && delIds.has(key)) return; // 已刪除，跳過
     const existing = map[key];
     if(!existing){ map[key] = n; return; }
     const localTime = n.updatedAt || n.ts || '';
@@ -1033,7 +1051,7 @@ function mergeNotes(localNotes, cloudNotes) {
   });
   return Object.values(map).sort((a,b) => (a.ts||'') < (b.ts||'') ? -1 : 1);
 }
-function mergeUnitsData(localUnits, cloudUnits) {
+function mergeUnitsData(localUnits, cloudUnits, delIds) {
   const cloudMap = {};
   (cloudUnits || []).forEach(u => { cloudMap[u.name] = u; });
   const localMap = {};
@@ -1042,14 +1060,14 @@ function mergeUnitsData(localUnits, cloudUnits) {
   const result = (localUnits || []).map(u => {
     const cu = cloudMap[u.name];
     if(!cu) return u;
-    return { ...u, notes: mergeNotes(u.notes || [], cu.notes || []) };
+    return { ...u, notes: mergeNotes(u.notes || [], cu.notes || [], delIds) };
   });
-  // 雲端有、本機沒有的節目（通常不會發生，但保險起見加在最後）
+  // 雲端有、本機沒有的節目（保險起見加在最後）
   (cloudUnits || []).forEach(cu => { if(!localMap[cu.name]) result.push(cu); });
   return result;
 }
 
-/* 合併上傳：先拉雲端 → 合併 → 上傳合併結果 → 更新本機 */
+/* 合併上傳：先拉雲端 → 合併（含 tombstone）→ 上傳合併結果 → 更新本機 */
 async function syncMergeUpload(){
   if(!syncUrl) return;
   setSyncStatus('☁️ 同步中…');
@@ -1058,13 +1076,22 @@ async function syncMergeUpload(){
     const getRes = await fetch(syncUrl);
     const getJson = await getRes.json();
     const cloud = getJson.data;
-    // 2. 合併本機與雲端
+    // 2. 合併 tombstone（本機已刪除 ∪ 雲端已刪除）
+    const mergedDelIds = new Set(deletedNoteIds);
+    if(cloud && Array.isArray(cloud.deletedNoteIds)){
+      cloud.deletedNoteIds.forEach(id => mergedDelIds.add(String(id)));
+    }
+    if(mergedDelIds.size !== deletedNoteIds.size){
+      deletedNoteIds = mergedDelIds;
+      saveDeletedNoteIds();
+    }
+    // 3. 合併本機與雲端（tombstone 過濾在 mergeNotes 內部執行）
     let merged = units;
     if(cloud && Array.isArray(cloud.units) && cloud.units.length){
-      merged = mergeUnitsData(units, cloud.units);
+      merged = mergeUnitsData(units, cloud.units, mergedDelIds);
     }
-    // 3. 上傳合併後資料
-    const payload = { units: merged, appTitle, filters: getFiltersSnapshot() };
+    // 4. 上傳合併後資料（含 tombstone 清單，讓其他裝置也知道哪些已刪除）
+    const payload = { units: merged, appTitle, filters: getFiltersSnapshot(), deletedNoteIds: [...mergedDelIds] };
     const postRes = await fetch(syncUrl, {
       method:'POST',
       headers:{ 'Content-Type':'text/plain;charset=utf-8' },
@@ -1072,7 +1099,7 @@ async function syncMergeUpload(){
     });
     const postJson = await postRes.json();
     const t = postJson.updatedAt || new Date().toISOString();
-    // 4. 更新本機為合併結果
+    // 5. 更新本機為合併結果
     units = merged;
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(units));
@@ -1933,6 +1960,8 @@ function addNote(ui){
   saveData(); renderTangNotes();
 }
 function delNote(ui, id){
+  deletedNoteIds.add(String(id)); // tombstone：記住這個 ID 已刪除，防止輪詢時從雲端復活
+  saveDeletedNoteIds();
   units[ui].notes=(units[ui].notes||[]).filter(n=>n.id!==id);
   selectedNoteKeys.delete(noteKey(ui,id));
   saveData(); renderTangNotes();
@@ -2299,7 +2328,7 @@ document.addEventListener('keydown',e=>{
 });
 
 /* ── 初始化：從 localStorage 讀取 ── */
-loadTitle(); loadSyncUrl(); loadAutoSync(); loadData(); loadFilters(); renderCur(); renderUnits();
+loadTitle(); loadSyncUrl(); loadAutoSync(); loadDeletedNoteIds(); loadData(); loadFilters(); renderCur(); renderUnits();
 if(syncUrl){
   let hasSyncedBefore=''; try{ hasSyncedBefore=localStorage.getItem(SYNC_TIME_KEY)||''; }catch(e){}
   if(hasSyncedBefore){
