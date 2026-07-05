@@ -1105,7 +1105,12 @@ async function syncMergeUpload(){
       localStorage.setItem(STORAGE_KEY, JSON.stringify(units));
       localStorage.setItem(SYNC_TIME_KEY, t);
     } catch(e){}
-    rerenderAll();
+    // 若使用者正在輸入筆記，跳過視覺重繪（資料已存雲端，不影響資料）
+    const a = document.activeElement;
+    const aid = a ? (a.id || '') : '';
+    const isTyping = aid.startsWith('note-text-') || aid.startsWith('note-cat-') ||
+                     aid === 'modalNoteText' || aid === 'modalNoteCat';
+    if(!isTyping) rerenderAll();
     setSyncStatus(`☁️ 已同步 ${fmtSyncTime(t)}`);
   } catch(err){
     setSyncStatus('⚠️ 同步失敗，請檢查網路');
