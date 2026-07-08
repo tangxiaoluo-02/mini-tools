@@ -1031,23 +1031,45 @@ function mergeNotes(localNotes, cloudNotes, delIds) {
     if(delIds && delIds.has(String(n.id))) return;
     map[String(n.id)] = n;
   });
-  // 本機筆記：新 ID 直接加入；相同 ID 比較 updatedAt（沒有則用 ts）決定新舊
   (localNotes || []).forEach(n => {
     const key = String(n.id ?? (Date.now() + Math.random()));
-    if(delIds && delIds.has(key)) return; // 已刪除，跳過
-    const existing = map[key];
-    if(!existing){ map[key] = n; return; }
+    if(delIds && delIds.has(key)) return;
+    const cloud = map[key];
+    if(!cloud){ map[key] = n; return; } // 只有本機有，直接加入
     const localTime = n.updatedAt || n.ts || '';
-    const cloudTime = existing.updatedAt || existing.ts || '';
-    if(localTime === cloudTime){ map[key] = n; return; } // 同版本，保留本機
-    // 有衝突：新版當主體，舊版內容附在下方供參考
-    const [newer, older] = localTime > cloudTime ? [n, existing] : [existing, n];
-    const newerMain = noteMainText(newer.text);
-    const olderMain = noteMainText(older.text);
-    const mergedText = newerMain === olderMain
-      ? newerMain
-      : `${newerMain}\n\n==其他裝置：${fmtConflictTime(older.updatedAt||older.ts)}==\n${olderMain}`;
-    map[key] = { ...newer, text: mergedText };
+    const cloudTime = cloud.updatedAt || cloud.ts || '';
+    if(localTime === cloudTime){ map[key] = n; return; } // 完全同版本
+
+    // ── 衝突判斷：用 synced 辨別「自己改的」vs「別台裝置改的」──
+    // n.synced = 這台裝置上次確認同步成功時，這則筆記的 updatedAt
+    const lastSynced = n.synced || n.ts || '';
+
+    if(localTime > cloudTime){
+      // 本機較新
+      if(lastSynced >= cloudTime){
+        // 雲端這版本我已看過（是我自己的舊版），直接用本機新版即可
+        map[key] = n;
+      } else {
+        // 雲端有我沒看過的變更（別台裝置改過）→ 真衝突，附上雲端版本
+        const newerMain = noteMainText(n.text);
+        const olderMain = noteMainText(cloud.text);
+        map[key] = { ...n, text: newerMain === olderMain ? newerMain :
+          `${newerMain}\n\n==其他裝置：${fmtConflictTime(cloudTime)}==\n${olderMain}` };
+      }
+    } else {
+      // 雲端較新
+      const localHasEdits = localTime > lastSynced; // 本機也有未同步的修改
+      if(localHasEdits){
+        // 雙方都有獨立修改 → 真衝突，雲端版本為主，本機附在下方
+        const newerMain = noteMainText(cloud.text);
+        const olderMain = noteMainText(n.text);
+        map[key] = { ...cloud, text: newerMain === olderMain ? newerMain :
+          `${newerMain}\n\n==其他裝置：${fmtConflictTime(localTime)}==\n${olderMain}` };
+      } else {
+        // 只有雲端改過，本機沒有未同步的修改 → 直接用雲端版本
+        map[key] = cloud;
+      }
+    }
   });
   return Object.values(map).sort((a,b) => (a.ts||'') < (b.ts||'') ? -1 : 1);
 }
@@ -1099,8 +1121,11 @@ async function syncMergeUpload(){
     });
     const postJson = await postRes.json();
     const t = postJson.updatedAt || new Date().toISOString();
-    // 5. 更新本機為合併結果
-    units = merged;
+    // 5. 更新本機為合併結果，並標記每則筆記 synced（讓下次衝突偵測知道哪個版本我已確認過）
+    units = merged.map(u => ({
+      ...u,
+      notes: (u.notes || []).map(n => ({ ...n, synced: n.updatedAt || n.ts || '' }))
+    }));
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(units));
       localStorage.setItem(SYNC_TIME_KEY, t);
