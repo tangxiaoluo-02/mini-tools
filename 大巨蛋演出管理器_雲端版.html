@@ -1971,12 +1971,12 @@ function renderNoteCatTags(n){
     return `<span class="note-cat-tag" style="background:${cc.bg};color:${cc.fg}">${esc(c)}</span>`;
   }).join('');
 }
-/* ── 筆記內文的核取清單：一行寫成「- [ ] 內容」或「- [x] 內容」，顯示時會變成可直接點擊打勾 ── */
-const CHECKLIST_LINE_RE = /^(\s*)-\s\[([ xX])\]\s?(.*)$/;
+/* ── 筆記內文的核取清單：一行寫成「[] 內容」或「[x] 內容」，顯示時會變成可直接點擊打勾 ── */
+const CHECKLIST_LINE_RE = /^\[([xX]?)\]\s*(.*)$/;
 function noteChecklistProgress(text){
   const lines=(text||'').split('\n');
   let total=0, checked=0;
-  lines.forEach(l=>{ const m=l.match(CHECKLIST_LINE_RE); if(m){ total++; if(m[2].toLowerCase()==='x') checked++; } });
+  lines.forEach(l=>{ const m=l.match(CHECKLIST_LINE_RE); if(m){ total++; if(m[1]) checked++; } });
   return total ? { total, checked } : null;
 }
 function renderNoteText(ui, n){
@@ -1984,9 +1984,9 @@ function renderNoteText(ui, n){
   return lines.map((line,li)=>{
     const m=line.match(CHECKLIST_LINE_RE);
     if(m){
-      const isChecked=m[2].toLowerCase()==='x';
+      const isChecked=!!m[1];
       return `<div class="note-check-line${isChecked?' checked':''}" onclick="event.stopPropagation();toggleNoteChecklistLine(${ui},${n.id},${li})">
-        <span class="note-check-box">${isChecked?'☑':'☐'}</span><span>${esc(m[3])}</span>
+        <span class="note-check-box">${isChecked?'☑':'☐'}</span><span>${esc(m[2])}</span>
       </div>`;
     }
     return `<div>${esc(line)||'&nbsp;'}</div>`;
@@ -1998,8 +1998,8 @@ function toggleNoteChecklistLine(ui, id, lineIndex){
   const lines=note.text.split('\n');
   const m=lines[lineIndex] && lines[lineIndex].match(CHECKLIST_LINE_RE);
   if(!m) return;
-  const nowChecked = m[2].toLowerCase()!=='x';
-  lines[lineIndex]=`${m[1]}- [${nowChecked?'x':' '}] ${m[3]}`;
+  const nowChecked = !m[1];
+  lines[lineIndex]=`[${nowChecked?'x':''}] ${m[2]}`;
   note.text=lines.join('\n');
   note.updatedAt=new Date().toISOString();
   saveData(); renderTangNotes();
