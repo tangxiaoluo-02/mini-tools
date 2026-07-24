@@ -99,6 +99,10 @@
     }
     .note-add-row input:focus, .note-add-row textarea:focus { outline: none; border-color: var(--primary); }
     .note-resolved { text-decoration: line-through; color: var(--muted); }
+    .note-check-line { display: flex; align-items: flex-start; gap: 6px; cursor: pointer; }
+    .note-check-box { flex-shrink: 0; }
+    .note-check-line.checked { text-decoration: line-through; color: var(--muted); }
+    .note-check-progress { font-size: .7rem; color: var(--muted); flex-shrink: 0; }
     .tang-toolbar {
       display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
       padding: 10px 12px; background: var(--primary-l); border-radius: 8px;
@@ -984,7 +988,11 @@ async function forceDownloadFromCloud(){
     const json=await res.json();
     const cloud=json.data, cloudTime=json.updatedAt||'';
     if(!cloud || !Array.isArray(cloud.units)){ setSyncStatus('⚠️ 雲端目前沒有可用的資料'); return; }
-    units=cloud.units;
+    // 標記每則筆記為「已確認同步」，避免下次合併時誤判成「另一台裝置改的」
+    units=cloud.units.map(u => ({
+      ...u,
+      notes: (u.notes || []).map(n => ({ ...n, synced: n.updatedAt || n.ts || '' }))
+    }));
     if(cloud.appTitle) appTitle=cloud.appTitle;
     applyFiltersSnapshot(cloud.filters);
     try {
@@ -1010,124 +1018,41 @@ function fmtSyncTime(iso){
   return `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
 }
 
-/* ── 合併邏輯：讓多裝置同時新增筆記不互相覆蓋 ── */
-// 擷取筆記的「主要內容」，去掉已附加的其他裝置舊版本段落（防止重複疊加）
-function noteMainText(text){
-  return (text||'').replace(/\n\n==其他裝置：[\s\S]*$/, '').trim();
-}
-function fmtConflictTime(iso){
-  if(!iso) return '未知時間';
-  const d=new Date(iso);
-  if(isNaN(d.getTime())) return iso;
-  const mm=String(d.getMonth()+1).padStart(2,'0'), dd=String(d.getDate()).padStart(2,'0');
-  const hh=String(d.getHours()).padStart(2,'0'), mi=String(d.getMinutes()).padStart(2,'0');
-  return `${mm}/${dd} ${hh}:${mi}`;
-}
-function mergeNotes(localNotes, cloudNotes, delIds) {
-  const map = {};
-  // 先放雲端筆記（已刪除的直接跳過）
-  (cloudNotes || []).forEach(n => {
-    if(n.id == null) return;
-    if(delIds && delIds.has(String(n.id))) return;
-    map[String(n.id)] = n;
-  });
-  (localNotes || []).forEach(n => {
-    const key = String(n.id ?? (Date.now() + Math.random()));
-    if(delIds && delIds.has(key)) return;
-    const cloud = map[key];
-    if(!cloud){ map[key] = n; return; } // 只有本機有，直接加入
-    const localTime = n.updatedAt || n.ts || '';
-    const cloudTime = cloud.updatedAt || cloud.ts || '';
-    if(localTime === cloudTime){ map[key] = n; return; } // 完全同版本
-
-    // ── 衝突判斷：用 synced 辨別「自己改的」vs「別台裝置改的」──
-    // n.synced = 這台裝置上次確認同步成功時，這則筆記的 updatedAt
-    const lastSynced = n.synced || n.ts || '';
-
-    if(localTime > cloudTime){
-      // 本機較新
-      if(lastSynced >= cloudTime){
-        // 雲端這版本我已看過（是我自己的舊版），直接用本機新版即可
-        map[key] = n;
-      } else {
-        // 雲端有我沒看過的變更（別台裝置改過）→ 真衝突，附上雲端版本
-        const newerMain = noteMainText(n.text);
-        const olderMain = noteMainText(cloud.text);
-        map[key] = { ...n, text: newerMain === olderMain ? newerMain :
-          `${newerMain}\n\n==其他裝置：${fmtConflictTime(cloudTime)}==\n${olderMain}` };
-      }
-    } else {
-      // 雲端較新
-      const localHasEdits = localTime > lastSynced; // 本機也有未同步的修改
-      if(localHasEdits){
-        // 雙方都有獨立修改 → 真衝突，雲端版本為主，本機附在下方
-        const newerMain = noteMainText(cloud.text);
-        const olderMain = noteMainText(n.text);
-        map[key] = { ...cloud, text: newerMain === olderMain ? newerMain :
-          `${newerMain}\n\n==其他裝置：${fmtConflictTime(localTime)}==\n${olderMain}` };
-      } else {
-        // 只有雲端改過，本機沒有未同步的修改 → 直接用雲端版本
-        map[key] = cloud;
-      }
-    }
-  });
-  return Object.values(map).sort((a,b) => (a.ts||'') < (b.ts||'') ? -1 : 1);
-}
-function mergeUnitsData(localUnits, cloudUnits, delIds) {
-  const cloudMap = {};
-  (cloudUnits || []).forEach(u => { cloudMap[u.name] = u; });
-  const localMap = {};
-  (localUnits || []).forEach(u => { localMap[u.name] = u; });
-  // 以本機的節目順序為主，逐一合併筆記
-  const result = (localUnits || []).map(u => {
-    const cu = cloudMap[u.name];
-    if(!cu) return u;
-    return { ...u, notes: mergeNotes(u.notes || [], cu.notes || [], delIds) };
-  });
-  // 雲端有、本機沒有的節目（保險起見加在最後）
-  (cloudUnits || []).forEach(cu => { if(!localMap[cu.name]) result.push(cu); });
-  return result;
-}
-
-/* 合併上傳：先拉雲端 → 合併（含 tombstone）→ 上傳合併結果 → 更新本機 */
+/* ── 合併比對邏輯已搬到 GAS 後端（doPost 內，跟寫入鎖包在一起執行）──
+   原因：如果合併在網頁端算好才送出去，兩台裝置幾乎同時同步時，
+   後送出的那台可能是拿著舊資料算合併，會把先送出那台的內容悄悄蓋掉。
+   搬到後端、在鎖定期間現場讀取雲端最新內容再合併，才能保證不管誰先誰後，
+   合併時看到的都是當下最新的真實資料。這裡只負責把「本機原始資料」送出去，
+   並把伺服器回傳「已經合併好」的結果套用回本機。 ── */
 async function syncMergeUpload(){
   if(!syncUrl) return;
   setSyncStatus('☁️ 同步中…');
   try {
-    // 1. 拉取雲端現況
-    const getRes = await fetch(syncUrl);
-    const getJson = await getRes.json();
-    const cloud = getJson.data;
-    // 2. 合併 tombstone（本機已刪除 ∪ 雲端已刪除）
-    const mergedDelIds = new Set(deletedNoteIds);
-    if(cloud && Array.isArray(cloud.deletedNoteIds)){
-      cloud.deletedNoteIds.forEach(id => mergedDelIds.add(String(id)));
-    }
-    if(mergedDelIds.size !== deletedNoteIds.size){
-      deletedNoteIds = mergedDelIds;
-      saveDeletedNoteIds();
-    }
-    // 3. 合併本機與雲端（tombstone 過濾在 mergeNotes 內部執行）
-    let merged = units;
-    if(cloud && Array.isArray(cloud.units) && cloud.units.length){
-      merged = mergeUnitsData(units, cloud.units, mergedDelIds);
-    }
-    // 4. 上傳合併後資料（含 tombstone 清單，讓其他裝置也知道哪些已刪除）
-    const payload = { units: merged, appTitle, filters: getFiltersSnapshot(), deletedNoteIds: [...mergedDelIds] };
+    const payload = { mode:'merge', units, appTitle, filters: getFiltersSnapshot(), deletedNoteIds: [...deletedNoteIds] };
     const postRes = await fetch(syncUrl, {
       method:'POST',
       headers:{ 'Content-Type':'text/plain;charset=utf-8' },
       body: JSON.stringify(payload)
     });
     const postJson = await postRes.json();
+    if(postJson.error){ setSyncStatus(`⚠️ ${postJson.error}`); return; }
+    const merged = postJson.data;
     const t = postJson.updatedAt || new Date().toISOString();
-    // 5. 更新本機為合併結果，並標記每則筆記 synced（讓下次衝突偵測知道哪個版本我已確認過）
-    units = merged.map(u => ({
-      ...u,
-      notes: (u.notes || []).map(n => ({ ...n, synced: n.updatedAt || n.ts || '' }))
-    }));
+    if(merged && Array.isArray(merged.units)){
+      // 更新本機為合併結果，並標記每則筆記 synced（讓下次衝突偵測知道哪個版本我已確認過）
+      units = merged.units.map(u => ({
+        ...u,
+        notes: (u.notes || []).map(n => ({ ...n, synced: n.updatedAt || n.ts || '' }))
+      }));
+      if(merged.appTitle) appTitle = merged.appTitle;
+      if(Array.isArray(merged.deletedNoteIds)){
+        deletedNoteIds = new Set(merged.deletedNoteIds.map(String));
+        saveDeletedNoteIds();
+      }
+    }
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(units));
+      localStorage.setItem(TITLE_KEY, appTitle);
       localStorage.setItem(SYNC_TIME_KEY, t);
     } catch(e){}
     // 若使用者正在輸入筆記，跳過視覺重繪（資料已存雲端，不影響資料）
@@ -1158,49 +1083,24 @@ async function syncUpload(){
   if(!syncUrl) return;
   setSyncStatus('☁️ 同步中…');
   try {
-    const payload={ units, appTitle, filters:getFiltersSnapshot() };
+    const payload={ mode:'overwrite', units, appTitle, filters:getFiltersSnapshot(), deletedNoteIds:[...deletedNoteIds] };
     const res=await fetch(syncUrl, {
       method:'POST',
       headers:{ 'Content-Type':'text/plain;charset=utf-8' },
       body: JSON.stringify(payload)
     });
     const json=await res.json();
+    if(json.error){ setSyncStatus(`⚠️ ${json.error}`); return; }
     const t=json.updatedAt || new Date().toISOString();
-    try { localStorage.setItem(SYNC_TIME_KEY, t); } catch(e){}
+    // 整份覆蓋後，雲端現在跟本機一致，標記每則筆記為「已確認同步」，避免下次合併誤判成「另一台裝置改的」
+    units = units.map(u => ({
+      ...u,
+      notes: (u.notes || []).map(n => ({ ...n, synced: n.updatedAt || n.ts || '' }))
+    }));
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(units)); localStorage.setItem(SYNC_TIME_KEY, t); } catch(e){}
     setSyncStatus(`☁️ 已同步 ${fmtSyncTime(t)}`);
   } catch(err){
     setSyncStatus('⚠️ 同步失敗，請檢查網路');
-  }
-}
-async function syncDownloadIfNewer(){
-  if(!syncUrl) return;
-  setSyncStatus('☁️ 檢查雲端中…');
-  try {
-    const res=await fetch(syncUrl);
-    const json=await res.json();
-    const cloud=json.data, cloudTime=json.updatedAt||'';
-    let localTime=''; try{ localTime=localStorage.getItem(SYNC_TIME_KEY)||''; }catch(e){}
-    if(cloud && Array.isArray(cloud.units) && cloud.units.length && (!localTime || cloudTime>localTime)){
-      // 合併（不再整包覆蓋），把雲端有而本機沒有的筆記補進來
-      const merged = mergeUnitsData(units, cloud.units);
-      units = merged;
-      if(cloud.appTitle) appTitle=cloud.appTitle;
-      applyFiltersSnapshot(cloud.filters);
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(units));
-        localStorage.setItem(TITLE_KEY, appTitle);
-        localStorage.setItem(FILTERS_KEY, JSON.stringify(getFiltersSnapshot()));
-        localStorage.setItem(SYNC_TIME_KEY, cloudTime);
-      } catch(e){}
-      rerenderAll();
-      setSyncStatus(`☁️ 已從雲端更新（${fmtSyncTime(cloudTime)}）`);
-    } else if(!cloud || !cloud.units || !cloud.units.length){
-      await syncMergeUpload();
-    } else {
-      setSyncStatus(`☁️ 已是最新（${fmtSyncTime(localTime||cloudTime)}）`);
-    }
-  } catch(err){
-    setSyncStatus('⚠️ 雲端連線失敗，請檢查網址或網路');
   }
 }
 function manualSync(){
@@ -2071,8 +1971,43 @@ function renderNoteCatTags(n){
     return `<span class="note-cat-tag" style="background:${cc.bg};color:${cc.fg}">${esc(c)}</span>`;
   }).join('');
 }
+/* ── 筆記內文的核取清單：一行寫成「- [ ] 內容」或「- [x] 內容」，顯示時會變成可直接點擊打勾 ── */
+const CHECKLIST_LINE_RE = /^(\s*)-\s\[([ xX])\]\s?(.*)$/;
+function noteChecklistProgress(text){
+  const lines=(text||'').split('\n');
+  let total=0, checked=0;
+  lines.forEach(l=>{ const m=l.match(CHECKLIST_LINE_RE); if(m){ total++; if(m[2].toLowerCase()==='x') checked++; } });
+  return total ? { total, checked } : null;
+}
+function renderNoteText(ui, n){
+  const lines=(n.text||'').split('\n');
+  return lines.map((line,li)=>{
+    const m=line.match(CHECKLIST_LINE_RE);
+    if(m){
+      const isChecked=m[2].toLowerCase()==='x';
+      return `<div class="note-check-line${isChecked?' checked':''}" onclick="event.stopPropagation();toggleNoteChecklistLine(${ui},${n.id},${li})">
+        <span class="note-check-box">${isChecked?'☑':'☐'}</span><span>${esc(m[3])}</span>
+      </div>`;
+    }
+    return `<div>${esc(line)||'&nbsp;'}</div>`;
+  }).join('');
+}
+function toggleNoteChecklistLine(ui, id, lineIndex){
+  const note=(units[ui].notes||[]).find(x=>x.id===id);
+  if(!note) return;
+  const lines=note.text.split('\n');
+  const m=lines[lineIndex] && lines[lineIndex].match(CHECKLIST_LINE_RE);
+  if(!m) return;
+  const nowChecked = m[2].toLowerCase()!=='x';
+  lines[lineIndex]=`${m[1]}- [${nowChecked?'x':' '}] ${m[3]}`;
+  note.text=lines.join('\n');
+  note.updatedAt=new Date().toISOString();
+  saveData(); renderTangNotes();
+}
 function renderNoteRow(ui, n, opts={}){
   const catTags=renderNoteCatTags(n);
+  const progress=noteChecklistProgress(n.text);
+  const progressBadge=progress?`<span class="note-check-progress">${progress.checked}/${progress.total}</span>`:'';
 
   if(opts.stacked){
     const selectBox = opts.selectable ? `<input type="checkbox" ${opts.selected?'checked':''} onclick="toggleSelectNote(${ui},${n.id})">` : '';
@@ -2083,7 +2018,8 @@ function renderNoteRow(ui, n, opts={}){
       <div class="note-row-top">
         ${selectBox}
         <span class="note-cat-tags">${catTags}</span>
-        <span class="note-text${n.resolved?' note-resolved':''}" style="flex:1">${esc(n.text)}</span>
+        ${progressBadge}
+        <span class="note-text${n.resolved?' note-resolved':''}" style="flex:1">${renderNoteText(ui,n)}</span>
       </div>
       <div class="note-row-bottom">
         ${opts.showUnitName?`<span class="note-unit-name">${esc(opts.unitName)}</span>`:''}
@@ -2097,7 +2033,8 @@ function renderNoteRow(ui, n, opts={}){
   const resolvedPart = n.resolved?'<span class="badge ok" style="flex-shrink:0">已解決</span>':'';
   return `<div class="note-item">
     <span class="note-cat-tags">${catTags}</span>
-    <span class="note-text${n.resolved?' note-resolved':''}" style="flex:1">${esc(n.text)}</span>
+    ${progressBadge}
+    <span class="note-text${n.resolved?' note-resolved':''}" style="flex:1">${renderNoteText(ui,n)}</span>
     ${resolvedPart}
     <button class="bi" onclick="startEditNote(${ui},${n.id})" title="編輯">✏️</button>
   </div>`;
@@ -2355,6 +2292,13 @@ function renderTangNotesByCategoryView(){
 /* ── Enter 快捷鍵 ── */
 document.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&['iH','iM','iS','iMs'].includes(e.target.id)) addSeg(1);
+});
+
+/* ── 網路恢復時自動補一次同步（避免斷網很久沒發現，資料一直卡在本機沒上傳） ── */
+window.addEventListener('online', () => {
+  if(!syncUrl) return;
+  let hasSyncedBefore=''; try{ hasSyncedBefore=localStorage.getItem(SYNC_TIME_KEY)||''; }catch(e){}
+  if(hasSyncedBefore) syncMergeUpload();
 });
 
 /* ── 初始化：從 localStorage 讀取 ── */
